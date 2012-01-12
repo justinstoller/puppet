@@ -1,0 +1,53 @@
+step "Tear down #{db} from testing"
+
+packages = db
+
+hosts.each do |host|
+
+  next unless host['roles'].include?('master')
+
+  case db
+  # install mysql
+  when 'mysql'
+    case host['platform']
+    when /debian|ubuntu/
+      packages = 'mysql-client mysql-server'
+      service = 'mysqld'
+    when /el/
+      packages = 'mysql mysql-server'
+      service = 'mysqld'
+    when /sles/
+      packages = 'mysql'
+      service = 'mysql'
+    end
+
+  # install sqlite
+  when 'sqlite3'
+    packages = 'sqlite3'
+
+  # install postgres
+  when 'postgresql'
+    packages = 'postgresql'
+
+  end
+
+  case host['platform']
+  when /debian|ubuntu/
+    remove_cmd = "apt-get purge -y #{packages}"
+  when /el/
+    remove_cmd = "yum remove -y #{packages}"
+  when /sles/
+    remove_cmd = "zypper remove -y #{packages}"
+  end
+
+  on host, "service #{service} stop",
+    :acceptable_exit_codes => [0, 1] if service
+
+  on host, remove_cmd
+
+  on host, %Q!cat > #{host['puppet_conf_path']} <<EOF
+#{host['original_puppet_conf']}
+EOF
+!
+
+end
