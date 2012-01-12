@@ -1,0 +1,10 @@
+test_name 'Ensure storeconfigs works when realizing exported resources by tag'
+
+step 'run manifest to export resources on each node'
+apply_manifest_on hosts, "@@notify { $hostname: tag => 'storeconfig_test' }"
+
+step 'run manifests to realize resources on each node'
+apply_manifest_on hosts, "Notify <<| tag == 'storeconfig_test' |>>" do
+  # ensure the notice contains the hostnames of other nodes
+  # and NOT this hosts name
+end
