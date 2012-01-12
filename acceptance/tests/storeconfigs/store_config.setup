@@ -1,0 +1,175 @@
+step "Set up #{db} for testing"
+
+packages = ''
+service = nil
+dbpassword = nil
+dbuser = nil
+dbserver = nil
+dbsocket = nil
+dbname = nil
+gems = ''
+
+hosts.each do |host|
+
+  next unless host['roles'].include?('master')
+
+  host['is_pe?'] = TestConfig.puppet_enterprise_version ? true : false
+
+  # save puppet.conf
+  host['conf_path'] = ''
+  host['original_puppet_conf'] = ''
+  on host, puppet("--configprint config") do
+    host['puppet_conf_path'] = stdout.chomp
+  end
+
+  puppet_conf = {}
+  puppet_conf['main'] ||= {}
+  puppet_conf['master'] ||= {}
+  puppet_conf['agent'] ||= {}
+
+  def puppet_conf.out
+    out = ''
+    self.each_pair do |heading,values|
+      out += "[#{heading}]\n"
+      values.each_pair do |k,v|
+        out += "  #{k} = #{v}\n"
+      end
+    end
+    out
+  end
+
+  host['puppet_conf'] = puppet_conf
+
+  on host, "cat #{host['puppet_conf_path']}" do
+    host['original_puppet_conf'] = stdout.chomp
+
+    key ||= ''
+    stdout.each_line do |line|
+      # skip comments and blank lines
+      next if line =~ /\s*#/
+      next if line =~ /^[\n\s]$/
+
+      # save the conf section as a key in conf_file
+      if line =~ /\[(.*)\]/
+        key = $1.downcase
+        host['puppet_conf'][key] ||= {}
+        next
+      end
+
+      k, v = line.strip.split(/\s*=\s*/)
+      host['puppet_conf'][key][k] = v
+    end
+  end
+
+  Log.warn host['puppet_conf'].inspect
+
+  case db
+  # select the appropriate packages
+  when 'mysql'
+    dbuser = 'puppet'
+    dbpassword = 'puppet'
+    dbserver = 'localhost'
+    dbsocket = '/var/run/mysqld/mysqld.sock'
+    gems = 'mysql' unless host['is_pe?']
+
+    case host['platform']
+    when /debian|ubuntu/
+      packages = 'mysql-client mysql-server gcc build-essential'
+      service = 'mysql'
+    when /el/
+      packages = 'mysql mysql-server'
+      service = 'mysqld'
+    when /sles/
+      packages = 'mysql'
+      service = 'mysql'
+    end
+  when 'sqlite3'
+    packages = "#{db} libsqlite3-dev"
+    packages += ' gcc build-essential' if host['is_pe?']
+    gems = 'sqlite3'
+  when 'postgresql'
+    dbuser = 'puppet'
+    dbpassword = 'puppet'
+    dbserver = 'localhost'
+    dbname = 'puppet'
+    packages = "#{db} postgresql-server-dev-8.4"
+    packages += ' gcc build-essential' if host['is_pe?']
+    gems = 'pg'
+  end
+
+  # select appropriate installation command
+  case host['platform']
+  when /debian|ubuntu/
+    install_cmd = "apt-get install -y #{packages}"
+  when /el/
+    install_cmd = "yum install -y #{packages}"
+  when /sles/
+    install_cmd = "zypper install -y #{packages}"
+  end
+
+  if host['platform'] =~ /debian|ubuntu/
+    on host, "apt-get update"
+  end
+
+  # install
+  on host, install_cmd unless db == 'mysql' && host['is_pe?']
+
+  # install the PE specific Ruby Development Headers,
+  # included in FOSS versions of ruby
+
+  if host['is_pe?']
+    install_ruby_dev = nil
+    dev_package = ''
+
+    on host, "ls /tmp/puppet-enterprise-#{config['pe_ver']}-#{host['platform']}/packages/#{host['platform']}/ | grep ruby.*dev" do
+      dev_package = stdout.chomp
+      dev_package = "/tmp/puppet-enterprise-#{config['pe_ver']}-#{host['platform']}/packages/#{host['platform']}/" + dev_package
+    end
+
+    if host['platform'] =~ /debian|ubuntu/
+      install_ruby_dev = "dpkg -i #{dev_package}"
+    else
+      install_ruby_dev = "rpm -i #{dev_package}"
+    end
+
+    on host, install_ruby_dev
+  end
+
+  # install necessary gems for db
+  gem_cmd = ''
+  if host['is_pe?']
+    gem = '/opt/puppet/bin/gem'
+  else
+    gem = 'gem'
+  end
+
+  on host, "#{gem} install #{gems} --no-ri --no-rdoc" unless
+    db == 'mysql' && host['is_pe?']
+
+  # start service if necessary
+  on host, "service #{service} start",
+    :acceptable_exit_codes => [0, 1] if service
+
+  # update conf file
+  host['puppet_conf']['master']['storeconfigs'] = true
+  host['puppet_conf']['master']['dbadapter'] = db
+  host['puppet_conf']['master']['dbuser'] = dbuser if dbuser
+  host['puppet_conf']['master']['dbpassword'] = dbpassword if dbpassword
+  host['puppet_conf']['master']['dbserver'] = dbserver if dbserver
+  host['puppet_conf']['master']['dbsocket'] = dbsocket if dbsocket
+  host['puppet_conf']['master']['dbname'] = dbname if dbname
+
+  on host, %Q!cat > #{host['puppet_conf_path']} <<EOF
+#{host['puppet_conf'].out}
+EOF
+!
+
+  # Bounce the Puppet Master before continuing
+  if host['is_pe?']
+    master_service = 'pe-httpd'
+  else
+  end
+
+  on host, "service #{master_service} restart"
+
+end
