@@ -1,33 +1,30 @@
 step "Tear down #{db} from testing"
 
-packages = db
+packages = nil
 
 hosts.each do |host|
 
   next unless host['roles'].include?('master')
 
   case db
-  # install mysql
   when 'mysql'
     case host['platform']
     when /debian|ubuntu/
-      packages = 'mysql-client mysql-server'
-      service = 'mysqld'
+      packages = 'mysql-client mysql-server' unless host.is_pe?
+      service = 'mysql'
     when /el/
-      packages = 'mysql mysql-server'
+      packages = 'mysql mysql-server' unless host.is_pe?
       service = 'mysqld'
     when /sles/
-      packages = 'mysql'
+      packages = 'mysql' unless host.is_pe?
       service = 'mysql'
     end
 
-  # install sqlite
   when 'sqlite3'
-    packages = 'sqlite3'
+    packages = 'sqlite3 libsqlite3-dev'
 
-  # install postgres
   when 'postgresql'
-    packages = 'postgresql'
+    packages = 'postgresql postgresql-server-dev-8.4'
 
   end
 
@@ -40,14 +37,31 @@ hosts.each do |host|
     remove_cmd = "zypper remove -y #{packages}"
   end
 
-  on host, "service #{service} stop",
-    :acceptable_exit_codes => [0, 1] if service
-
-  on host, remove_cmd
+  unless host.is_pe? && db == 'mysql'
+    on host, remove_cmd
+    on host, "service #{service} stop",
+      :acceptable_exit_codes => [0, 1] if service
+  else
+    on host, %q{mysql -u root -p'puppet' -e "drop database storedconfigs;"}
+  end
 
   on host, %Q!cat > #{host['puppet_conf_path']} <<EOF
 #{host['original_puppet_conf']}
 EOF
 !
+
+  rake = if host.is_pe?
+           '/opt/puppet/bin/rake'
+         else
+           'rake'
+         end
+
+  tasks = [ 'nodegroup:delclass name=default class=storeconfigs' ]
+
+  tasks.each do |task|
+    on host, "#{rake} #{task}"
+  end
+
+  on host, 'rm -rf /etc/puppetlabs/puppet/modules/storeconfigs'
 
 end

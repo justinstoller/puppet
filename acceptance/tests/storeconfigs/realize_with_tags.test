@@ -1,10 +1,29 @@
 test_name 'Ensure storeconfigs works when realizing exported resources by tag'
 
+on master, %q{cat > /etc/puppetlabs/puppet/modules/storeconfigs/manifests/init.pp <<EOF
+class storeconfigs {
+  @@notify { "$hostname": tag => "storeconfig_test" }
+  Notify <<| tag == 'storeconfig_test' |>>
+}
+EOF
+}
+
 step 'run manifest to export resources on each node'
-apply_manifest_on hosts, "@@notify { $hostname: tag => 'storeconfig_test' }"
+hosts.each do |host|
+  on host, puppet('agent -t')
+end
 
 step 'run manifests to realize resources on each node'
-apply_manifest_on hosts, "Notify <<| tag == 'storeconfig_test' |>>" do
-  # ensure the notice contains the hostnames of other nodes
-  # and NOT this hosts name
+hosts.each do |host|
+  on host, puppet('agent -t') do
+    assert_no_match /warning/, stdout,
+      'Trying to export resources raised a warning!'
+
+    hosts.each do |hostname|
+      next if hostname == host
+
+      assert_match /#{hostname}/, stdout,
+        "Did not find #{hostname} in #{host}'s realized resources!"
+    end
+  end
 end
