@@ -230,6 +230,7 @@ EOF'
   end
 
   step 'Bounce the Puppet Master before continuing'
+  master_service = ''
   if host.is_pe?
     master_service = 'pe-httpd'
   else
