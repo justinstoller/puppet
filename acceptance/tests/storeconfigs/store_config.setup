@@ -1,187 +1,74 @@
 step "Set up #{db} for testing"
 
-packages = ''
-service = nil
-dbpassword = nil
-dbuser = 'console'
-dbserver = nil
-dbsocket = nil
-dbname = 'storedconfigs'
-gems = ''
-db_cmds = []
+service     = nil
+dbsocket    = nil
+gems        = ''
+packages    = []
+db_cmds     = []
+dbuser      = 'console'
+dbpassword  = 'puppet'
+dbserver    = 'localhost'
+dbname      = 'storedconfigs'
 
 hosts.each do |host|
 
   next unless host['roles'].include?('master')
 
-  # setup host specific actions
-  def host.is_pe?
-    @is_pe ||= TestConfig.puppet_enterprise_version ? true : false
-  end
-
-  def host.gem(action)
-    gem = if is_pe?
-            "#{self['puppetbindir']}/gem #{action} --no-ri --no-rdoc"
-          else
-            "gem #{action} --no-ri --no-rdoc"
-          end
-
-    on self, "#{gem} #{args}"
-  end
-
-  # select appropriate installation command
-  def host.install(*args)
-    if args.length = 1 && args[0] =~ /[\/\\]/
-      if self['platform'] =~ /debian|ubuntu/
-        install_cmd = "dpkg -i"
-      else
-        install_cmd = "rpm -i"
-      end
-    else
-      case self['platform']
-      when /debian|ubuntu/
-        install_cmd = "apt-get install -y"
-      when /el/
-        install_cmd = "yum install -y"
-      when /sles/
-        install_cmd = "zypper install -y"
-      end
-    end
-
-    on self, "#{install_cmd} #{args}"
-  end
-
-  def host.ensure_ruby_dev!
-    unless @ruby_dev_installed
-      if is_pe?
-        dev_package = ''
-
-        pre_reqs = 'gcc'
-        pre_reqs += ' build_essential' if self['platform'] =~ /debian|ubuntu/
-          ##### NOTE  self.os, self.family   ??
-
-        install pre_reqs
-
-        #### NOTE  get rid of /tmp/puppet-enterprise-...
-        on self, "ls /tmp/puppet-enterprise-#{config['pe_ver']}-#{host['platform']}/packages/#{host['platform']}/ | grep ruby.*dev" do
-          dev_package = stdout.chomp
-          dev_package = "/tmp/puppet-enterprise-#{config['pe_ver']}-#{host['platform']}/packages/#{host['platform']}/" + dev_package
-        end
-
-        install dev_package
-        @ruby_dev_installed = true
-      else
-        @ruby_dev_installed = true
-      end
-    end
-  end
-
-  step 'save puppet.conf'
-  host['original_puppet_conf'] = ''
-  on host, puppet("--configprint config") do
-    host['puppet_conf_path'] = stdout.chomp
-  end
-
-  puppet_conf = {}
-  puppet_conf['main'] ||= {}
-  puppet_conf['master'] ||= {}
-  puppet_conf['agent'] ||= {}
-
-  def puppet_conf.out
-    out = ''
-    self.each_pair do |heading,values|
-      out += "[#{heading}]\n"
-      values.each_pair do |k,v|
-        out += "  #{k} = #{v}\n"
-      end
-    end
-    out
-  end
-
-  host['puppet_conf'] = puppet_conf
-
-  on host, "cat #{host['puppet_conf_path']}" do
-    host['original_puppet_conf'] = stdout.chomp
-
-    key ||= ''
-    stdout.each_line do |line|
-      # skip comments and blank lines
-      next if line =~ /\s*#/
-      next if line =~ /^[\n\s]$/
-
-      # save the conf section as a key in conf_file
-      if line =~ /\[(.*)\]/
-        key = $1.downcase
-        host['puppet_conf'][key] ||= {}
-        next
-      end
-
-      k, v = line.strip.split(/\s*=\s*/)
-      host['puppet_conf'][key][k] = v
-    end
-  end
-
   step 'select db/platform specifics'
   case db
   # select the appropriate packages
   when 'mysql'
-    dbpassword = 'puppet'
-    dbserver = 'localhost'
     dbsocket = '/var/run/mysqld/mysqld.sock'
-    gems = 'mysql' unless host.is_pe?
-    db_user_cmd = %q{mysql -u root -p'puppet' -e "create user 'console'@'localhost' identified by 'puppet';"}
+    gems = 'mysql' unless TestConfig.is_pe?
+    db_user_cmd = %Q{mysql -u root -p'puppet' -e "create user '#{dbuser}'@'#{dbserver}' identified by '#{dbpassword}';"}
 
-    db_create_cmd = %q{mysql -u root -p'puppet' -e "create database storedconfigs character set utf8;"}
+    db_create_cmd = %Q{mysql -u root -p'puppet' -e "create database #{dbname} character set utf8;"}
 
-    db_privileges_cmd = %q{mysql -u root -p'puppet' -e "grant all privileges on storedconfigs.* to 'console'@'localhost';"}
+    db_privileges_cmd = %Q{mysql -u root -p'puppet' -e "grant all privileges on #{dbname}.* to '#{dbuser}'@'#{dbserver}';"}
 
-    db_cmds = host.is_pe? ? [ ] : [ db_user_cmd ]
+    db_cmds = TestConfig.is_pe? ? [ ] : [ db_user_cmd ]
     db_cmds += [ db_create_cmd, db_privileges_cmd ]
 
     case host['platform']
     when /debian|ubuntu/
-      packages = 'mysql-client mysql-server gcc build-essential'
+      packages = ['mysql-client', 'mysql-server']
       service = 'mysql'
     when /el/
-      packages = 'mysql mysql-server'
+      packages = ['mysql', 'mysql-server']
       service = 'mysqld'
     when /sles/
-      packages = 'mysql'
+      packages = ['mysql']
       service = 'mysql'
     end
   when 'sqlite3'
     dbuser = nil
     dbname = nil
-    packages = "#{db} libsqlite3-dev"
+    packages = ["#{db}", 'libsqlite3-dev']
     gems = 'sqlite3'
   when 'postgresql'
-    dbpassword = 'puppet'
     dbserver = 'localhost'
-    packages = "#{db} postgresql-server-dev-8.4"
+    packages = ["#{db}", 'postgresql-server-dev-8.4']
     gems = 'pg'
     db_root_cmd = %{su postgres -c "createuser --superuser root"}
-    db_user_cmd = %q{psql -d template1 -c "create user console with password 'puppet'"}
-    db_create_cmd = %q{psql -d template1 -c "create database storedconfigs"}
-    db_privileges_cmd = %q{psql -d template1 -c "grant create on database storedconfigs to console"}
+    db_user_cmd = %Q{psql -d template1 -c "create user #{dbuser} with password '#{dbpassword}'"}
+    db_create_cmd = %Q{psql -d template1 -c "create database #{dbname}"}
+    db_privileges_cmd = %Q{psql -d template1 -c "grant create on database #{dbname} to #{dbuser}"}
 
     db_cmds = [ db_root_cmd, db_user_cmd, db_create_cmd, db_privileges_cmd ]
   end
 
-  if host['platform'] =~ /debian|ubuntu/
-    on host, "apt-get update"
-  end
-
   step 'install db if necessary'
-  host.install(packages) unless db == 'mysql' && host.is_pe?
+  host.install(packages) unless db == 'mysql' && TestConfig.is_pe?
 
   # install the PE specific Ruby Development Headers,
   # included in FOSS versions of ruby
 
   step 'install ruby dev if pe'
+  host.ensure_ruby_dev!
 
   step 'install gems if necessary'
   host.gem("install #{gems}") unless
-    db == 'mysql' && host.is_pe?
+    db == 'mysql' && TestConfig.is_pe?
 
   step 'start service if necessary'
   on host, "service #{service} start",
@@ -201,41 +88,29 @@ hosts.each do |host|
   host['puppet_conf']['master']['dbserver'] = dbserver if dbserver
   host['puppet_conf']['master']['dbsocket'] = dbsocket if dbsocket
   host['puppet_conf']['master']['dbname'] = dbname if dbname
+  host['puppet_conf']['master']['dbmigrate'] = true if db == 'postgresql'
 
   on host, %Q!cat > #{host['puppet_conf_path']} <<EOF
 #{host['puppet_conf'].out}
 EOF
 !
 
+  step 'add storeconfig class to node'
   on host, 'mkdir -p /etc/puppetlabs/puppet/modules/storeconfigs/manifests'
   on host, 'cat > /etc/puppetlabs/puppet/modules/storeconfigs/manifests/init.pp <<EOF
 class storeconfigs { }
 EOF'
 
-  rake = nil
-  if host.is_pe?
-    rake = '/opt/puppet/bin/rake'
-  else
-    rake = 'rake'
-  end
-
-  dashboard_home = '/opt/puppet/share/puppet-dashboard'
   tasks = [
     'nodeclass:add name=storeconfigs',
     'nodegroup:addclass name=default class=storeconfigs'
    ]
 
   tasks.each do |task|
-    on host, "cd #{dashboard_home}; #{rake} #{task}"
+    on host, "cd #{host['dashboard_home']}; #{host['rake']} #{task}"
   end
 
   step 'Bounce the Puppet Master before continuing'
-  master_service = ''
-  if host.is_pe?
-    master_service = 'pe-httpd'
-  else
-  end
-
-  on host, "service #{master_service} restart"
+  host.service :master, :restart
 
 end
