@@ -1,10 +1,8 @@
 test_name "Should allow symlinks to directories as configuration directories"
 
+confine :except, :platform => 'windows'
+
 agents.each do |agent|
-  if agent['platform'].include?('windows')
-    skip_test "Test not supported on this platform"
-    next
-  end
 
   step "Create the test confdir with a link to it"
   confdir = agent.tmpdir('puppet_conf-directory')
