@@ -1,5 +1,7 @@
 test_name "should create cron"
 
+confine :except, :platform => 'windows'
+
 tmpuser = "pl#{rand(999999).to_i}"
 tmpfile = "/tmp/cron-test-#{Time.new.to_i}"
 
@@ -7,11 +9,6 @@ create_user = "user { '#{tmpuser}': ensure => present, managehome => false }"
 delete_user = "user { '#{tmpuser}': ensure => absent,  managehome => false }"
 
 agents.each do |host|
-    if host['platform'].include?('windows')
-      skip_test "Test not supported on this platform"
-      next
-    end
-
     step "ensure the user exist via puppet"
     apply_manifest_on host, create_user
 

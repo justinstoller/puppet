@@ -1,6 +1,8 @@
 test_name "tests that puppet correctly runs an exec."
 # original author: Dan Bode  --daniel 2010-12-23
 
+confine :except, :platform => 'windows'
+
 def before(agent)
   step "file to be touched should not exist."
   touched = agent.tmpfile('test-exec')
@@ -15,10 +17,7 @@ def after(agent, touched)
 end
 
 agents.each do |agent|
-  if agent['platform'].include?('windows')
-    Log.warn('Pending due to #11740')
-    next
-  end
+  Log.warn('Pending windows support due to #11740')
 
   touched = before(agent)
   apply_manifest_on(agent, "exec {'test': command=>'#{agent.touch(touched)}'}") do
