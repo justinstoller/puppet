@@ -18,8 +18,8 @@ module2libdir = "#{basedir}/2/a/lib"
 
 begin
   agents.each do |agent|
-    create_test_file(agent, get_test_file_path(agent, "#{module1libdir}/foo.rb"), "#1a", :mkdirs => true)
-    create_test_file(agent, get_test_file_path(agent, "#{module2libdir}//foo.rb"), "#2a", :mkdirs => true)
+    create_test_file(agent, "#{module1libdir}/foo.rb", "#1a", :mkdirs => true)
+    create_test_file(agent, "#{module2libdir}/foo.rb", "#2a", :mkdirs => true)
 
     on agent, puppet_apply("--modulepath=#{get_test_file_path(agent, "#{basedir}/1")}:#{get_test_file_path(agent, "#{basedir}/2")} --pluginsync -e 'notify { \"hello\": }'")
 
