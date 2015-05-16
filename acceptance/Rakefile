@@ -9,9 +9,13 @@ ONE_DAY_IN_SECS = 24 * 60 * 60
 REPO_CONFIGS_DIR = "repo-configs"
 CLEAN.include('*.tar', REPO_CONFIGS_DIR, 'merged_options.rb')
 
+# If elsewhere we're depending on internal network resources
+# then assume we can depend on them here
+INTERNAL_NETWORK = ENV['GEM_SOURCE'] && ENV['GEM_SOURCE'] =~ /puppetlabs/
+
 module HarnessOptions
 
-  DEFAULTS = {
+  defaults = {
     :type => 'git',
     :helper => ['lib/helper.rb'],
     :tests  => ['tests'],
@@ -26,9 +30,15 @@ module HarnessOptions
     :repo_proxy => true,
     :add_el_extras => true,
     :preserve_hosts => 'onfail',
-    :forge_host => 'forge-aio01-petest.puppetlabs.com',
-    :'master-start-curl-retries' => 30,
+    :'master-start-curl-retries' => 30
   }
+
+  site_specific_info = {
+    :epel_url   => 'http://osmirror.delivery.puppetlabs.net',
+    :forge_host => 'forge-aio01-petest.puppetlabs.com'
+  }
+
+  DEFAULTS = INTERNAL_NETWORK ? defaults.merge(site_specific_info) : defaults
 
   class Aggregator
     attr_reader :mode
