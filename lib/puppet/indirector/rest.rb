@@ -218,7 +218,24 @@ class Puppet::Indirector::REST < Puppet::Indirector::Terminus
   end
 
   def convert_to_http_error(response)
-    message = "Error #{response.code} on SERVER: #{(response.body||'').empty? ? response.message : uncompress_body(response)}"
+    # This first branch appears to be legacy code that no one actually
+    # knows why it exists.  See the test "if the body is empty raises an
+    # http error with theresponse header" at
+    # spec/unit/indirector/rest_spec.rb:31
+    if response.body.to_s.empty? && response.respond_to?(:message)
+      returned_message = response.message
+    elsif response['content-type'].is_a?(String)
+      content_type, body = parse_response(response)
+      if content_type =~ /[pj]son/
+        returned_message = JSON(body)["message"]
+      else
+        returned_message = uncompress_body(response)
+      end
+    else
+      returned_message = uncompress_body(response)
+    end
+
+    message = "Error #{response.code} on SERVER: #{returned_message}"
     Net::HTTPError.new(message, response)
   end
 
