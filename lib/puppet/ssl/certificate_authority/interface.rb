@@ -8,6 +8,22 @@ module Puppet
         DESTRUCTIVE_METHODS = [:destroy, :revoke]
         SUBJECTLESS_METHODS = [:list, :reinventory]
 
+        CERT_STATE_GLYPHS = {:signed => '+', :request => ' ', :invalid => '-'}
+        BASE_CERT_EXTS = %w{authorityKeyIdentifier subjectKeyIdentifier basicConstraints keyUsage extendedKeyUsage nsComment}
+        EXT_TRANSLATION = {'subjectAltNames' => 'altNames'}
+
+        def underscore_translation(word)
+          word.gsub(/[A-Z]/) {|match| "_#{match.downcase}" }
+        end
+
+        def space_translation(word)
+          word.gsub(/[A-Z]/) {|match| " #{match.downcase}" }
+        end
+
+        def no_translation(word)
+          word
+        end
+
         class InterfaceError < ArgumentError; end
 
         attr_reader :method, :subjects, :digest, :options
@@ -47,6 +63,7 @@ module Puppet
           self.subjects = options.delete(:to)
           @digest = options.delete(:digest)
           @options = options
+          @options[:output] ||= []
         end
 
         # List the hosts.
@@ -96,14 +113,52 @@ module Puppet
             next if certs[type].empty?
 
             certs[type].map do |host,info|
-              format_host(ca, host, type, info, name_width)
+              if @options[:format] || @options[:output]
+                new_format_host(ca, host, type, info, name_width)
+              else
+                legacy_format_host(ca, host, type, info, name_width)
+              end
             end
           end.flatten.compact.sort.join("\n")
 
           puts output
         end
 
-        def format_host(ca, host, type, info, width)
+        def new_format_host(ca, host, type, info, width)
+          cert, verify_error = info
+          glyph = CERT_STATE_GLYPHS[type]
+          name  = host.inspect.ljust(width)
+          fingerprint = @options[:output].include?('fingerprint') ? cert.digest(@digest).to_s : nil
+
+          attrs = cert.respond_to?(:custom_attributes) ? cert.custom_attributes : []
+          exts = cert.respond_to?(:request_extensions) ? cert.request_extensions : []
+          exts += cert.respond_to?(:custom_extensions) ? cert.custom_extensions : []
+          if cert.content.respond_to?(:extensions)
+            base = cert.content.extensions.select {|ext| BASE_CERT_EXTS.include?(ext.oid) }.map(&:to_h)
+          else
+            base = []
+          end
+
+          alt_names = cert.respond_to?(:subject_alt_names) ? cert.subject_alt_names : []
+
+          extensions = []
+          extensions += attrs if @options[:output].include?('attrs')
+          extensions += exts if @options[:output].include?('exts')
+          extensions += base if @options[:output].include?('base')
+
+          translation_method = {
+            'space'      => :space_translation,
+            'underscore' => :underscore_translation,
+            nil          => :no_translation
+          }[@options[:format]]
+
+          additional_info = extensions.map {|ext| "#{self.send(translation_method, ext['oid'])}: #{ext['value']}" }
+          additional_info << "#{self.send(translation_method, "altNames")}: #{alt_names.join(", ")}" unless alt_names.empty?
+
+          [glyph, name, cert.expiration, fingerprint, verify_error, additional_info.join(", ")].compact.join(' ')
+        end
+
+        def legacy_format_host(ca, host, type, info, width)
           cert, verify_error = info
           alt_names = case type
                       when :signed
@@ -118,7 +173,7 @@ module Puppet
 
           alt_str = "(alt names: #{alt_names.map(&:inspect).join(', ')})" unless alt_names.empty?
 
-          glyph = {:signed => '+', :request => ' ', :invalid => '-'}[type]
+          glyph = CERT_STATE_GLYPHS[type]
 
           name = host.inspect.ljust(width)
           fingerprint = cert.digest(@digest).to_s
@@ -161,7 +216,19 @@ module Puppet
           list = subjects == :all ? ca.waiting? : subjects
           raise InterfaceError, "No waiting certificate requests to sign" if list.empty?
           list.each do |host|
-            ca.sign(host, options[:allow_dns_alt_names])
+            puts "Signing certificate request for:"
+            info = Puppet::SSL::CertificateRequest.indirection.find(host)
+            puts legacy_format_host(ca, host, :request, info, host.length + 2)
+            if @options[:interactive] && !@options[:yes]
+              puts "Sign Certificate Request? [Y/n]"
+              if STDIN.gets =~ /[yY]/
+                ca.sign(host, options[:allow_dns_alt_names])
+              else
+                raise ArgumentError, "NOT signing certificate request for #{host}"
+              end
+            else
+              ca.sign(host, options[:allow_dns_alt_names])
+            end
           end
         end
 

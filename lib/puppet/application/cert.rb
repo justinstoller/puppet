@@ -79,6 +79,33 @@ class Puppet::Application::Cert < Puppet::Application
     set_log_level
   end
 
+  option("--format FORMAT") do |value|
+    unless ['space', 'underscore'].include? value
+      raise ArgumentError, "Format may only be one of `space' or `underscore'"
+    end
+
+    options[:format] = value
+  end
+
+  option("--output OUTPUT") do |value|
+    requested = value.to_s.split(',')
+    valid = ['fingerprint', 'attrs', 'exts', 'base']
+    unknown_output = requested - valid
+    unless unknown_output.empty?
+      raise ArgumentError, "Output may only be one of `fingerprint', `attrs', `exts', `base'"
+    end
+
+    options[:output] = value
+  end
+
+  option("--interactive", "-i") do |value|
+    options[:interactive] = true
+  end
+
+  option("--yes", "-y") do |value|
+    options[:yes] = true
+  end
+
   def help
     <<-'HELP'
 
