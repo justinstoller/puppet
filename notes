@@ -1,0 +1,80 @@
+There are four classes of cert extensions:
+  - Base extensions defined by standards that every cert Puppet creates has:
+    - authorityKeyIdentifier
+    - subjectKeyIdentifier
+    - basicConstraints
+    - keyUsage
+    - extendedKeyUsage
+    - nsComment
+  - Special extensions that Puppet recognizes for security processes (defined by a standard or by Puppet):
+    - subjectAltName
+    - pp_authorization
+    - pp_auth_role
+  - Custom extensions that Puppet has created to aid its users:
+    - pp_uuid
+    - pp_instance_id
+    - pp_image_name
+    - pp_preshared_key
+    - pp_cost_center
+    - pp_product
+    - pp_project
+    - pp_application
+    - pp_service
+    - pp_employee
+    - pp_created_by
+    - pp_environment
+    - pp_role
+    - pp_software_version
+    - pp_department
+    - pp_cluster
+    - pp_provisioner
+    - pp_region
+    - pp_datacenter
+    - pp_zone
+    - pp_network
+    - pp_securitypolicy
+    - pp_cloudplatform
+    - pp_apptier
+    - pp_hostname
+  - User created custom extensions.
+
+
+Currently we only display subjectAltName to the user when displaying certs.  When displaying we translate:
+"subjectAltName" -> "alt names"
+
+If a user has not set up custom oid mappings then they will see the numeric representation of any user created custom extension, eg: 1.3.6.1.4.1.34380.1.2.1, 1.3.6.1.4.1.34380.1.2.2, 1.3.6.1.4.1.34380.1.2.3.
+If they do set up custom oid mappings the extension name could be any string.
+
+Since all Puppet certs have the same base extensions, and they are added by the CA, we may not want to display the current base extensions.
+Base extensions *may* be more valuable when doing complex configurations of CAs (external, intermediate, HA)
+If we do want to show base extensions we may want to translate their names to match the existing "alt names" display, ie:
+"authorityKeyIdentifier" -> "authority key id"
+"subjectKeyIdentifier"   -> "subject key id"
+"basicConstraints"       -> "basic constraints"
+"keyUsage"               -> "key usage"
+"extendedKeyUsage"       -> "ext key usage"
+"nsComment"              -> "ns comment"
+
+If changing the "alt names" translation is possible, we may want to consider using underscores for our word intra-name word boundaries. This would asthetically unify the base extension displays and the custom extensions that puppet provides, as well as ease parsing of the command output in scripts. (eg. shell automatically treats spaces as item separators and underscores are considered part of a word when using extend regular expressions)
+
+
+listing styles:
+0: with custom attributes
+1: with/out base extensions
+2: with/out custom extensions
+
+extension names as listed, normalized to use spaces, normalized to use underscores
+--output attrs,exts,base
+--format spaces|underscores
+
+
+
+note: The documentation at https://docs.puppet.com/puppet/latest/reference/ssl_attributes_extensions.html#recommended-oids-for-attributes is incorrect. We explicitly disallow csrs with extensions outside of our oid sub trees or subjectAltNames.  See: puppet/ssl/certificate_authority.rb:325
+
+
+Prior art from the client team:
+https://tickets.puppetlabs.com/browse/PUP-2995
+https://tickets.puppetlabs.com/browse/PUP-4617
+
+Docs:
+https://docs.puppet.com/puppet/latest/reference/ssl_attributes_extensions.html#recommended-oids-for-attributes
