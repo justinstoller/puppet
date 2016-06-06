@@ -1,7 +1,7 @@
 require 'securerandom'
 require 'digest'
 
-WHITELIST =  %w{uuid password image dept net user cluster proj role auth_role auth}
+WHITELIST =  %w{uuid password image dept user proj role auth_role auth}
 def custom_attribute_content(role = 'webserver',
                              auth_role = 'puppet infrastructure',
                              user = 'Justin Stoller',
@@ -17,11 +17,11 @@ def custom_attribute_content(role = 'webserver',
   custom_attributes << "extension_requests:\n"
   custom_attributes << "  pp_image_name: 'redhat-7-x86_64'\n" if whitelist.include?('image')
   custom_attributes << "  pp_department: 'Engineering'\n" if whitelist.include?('dept')
-  custom_attributes << "  pp_network: 'delivery.puppetlabs.net'\n" if whitelist.include?('net')
-  custom_attributes << "  pp_cluster: 'vmpooler'\n" if whitelist.include?('cluster')
   custom_attributes << "  pp_employee: '#{user}'\n" if whitelist.include?('user')
   custom_attributes << "  pp_project: 'Puppet Server'\n" if whitelist.include?('proj')
   custom_attributes << "  pp_role: '#{role}'\n" if whitelist.include?('role')
+
+  custom_attributes
 end
 
 def create_non_root_agent(host, name, custom_cert_info)
@@ -74,6 +74,7 @@ EOF
   step "Create revoked Certs" do
     create_csr(master, 'compile master')
     create_csr(master, 'master of masters')
+
     2.times { create_csr(master, 'agent') }
 
     name = "pp" + @user_index.to_s
@@ -84,16 +85,15 @@ EOF
     create_non_root_agent(master, name, custom_cert_info)
     @user_index += 1
 
-    on master, puppet("cert sign --all")
+    on master, puppet("cert sign --all -I")
     4.times do |i|
-      on master, puppet("cert clean pp#{i}.delivery.puppetlabs.net")
+      on master, puppet("cert revoke pp#{i}.delivery.puppetlabs.net")
     end
   end
 
 
   step "Create signed Certs" do
     2.times { create_csr(master, 'compile master') }
-    create_csr(master, 'compile master')
     create_csr(master, 'puppetdb')
     create_csr(master, 'dashboard')
     10.times { create_csr(master, 'agent') }
@@ -106,7 +106,7 @@ EOF
     create_non_root_agent(master, name, custom_cert_info)
     @user_index += 1
 
-    on master, puppet("cert sign --all")
+    on master, puppet("cert sign --all -I")
   end
 
   step "Create pending CSRs" do
@@ -132,13 +132,14 @@ EOF
 
     3.times do
       name = "pp" + @user_index.to_s
+      uuid = SecureRandom.uuid
       custom_cert_info =
         custom_attribute_content('a host',
                                  'infrastructure',
                                  'Bob',
-                                 SecureRandom.uuid,
+                                 uuid,
                                  Digest::MD5.new.hexdigest(uuid),
-                                 WHITELIST.shuffle[0,2])
+                                 WHITELIST.shuffle[0,rand(9)])
       create_non_root_agent(master, name, custom_cert_info)
       @user_index += 1
     end

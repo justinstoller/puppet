@@ -64,6 +64,7 @@ module Puppet
           @digest = options.delete(:digest)
           @options = options
           @options[:output] ||= ['attrs', 'exts']
+          @options[:interactive] = true
         end
 
         # List the hosts.
@@ -130,6 +131,7 @@ module Puppet
           with_exts = @options[:output].include?('exts') || @options[:verbose]
 
           cert, verify_error = info
+          verify_error = "(#{verify_error})" if verify_error
           glyph = CERT_STATE_GLYPHS[type]
           name  = host.inspect.ljust(width)
           fingerprint = with_fingerprint ? cert.digest(@digest).to_s : nil
@@ -156,10 +158,10 @@ module Puppet
             nil          => :no_translation
           }[@options[:format]]
 
-          additional_info = extensions.map {|ext| "#{self.send(translation_method, ext['oid'])}: #{ext['value']}" }
-          additional_info << "#{self.send(translation_method, "altNames")}: #{alt_names.join(", ")}" unless alt_names.empty?
+          additional_info = extensions.map {|ext| "#{self.send(translation_method, ext['oid'])}: \"#{ext['value']}\"" }.sort
+          additional_info.unshift "#{self.send(translation_method, "alt names")}: #{alt_names.join(", ")}" unless alt_names.empty?
 
-          [glyph, name, cert.expiration, fingerprint, verify_error, additional_info.join(", ")].compact.join(' ')
+          [glyph, name, cert.expiration.iso8601, fingerprint, verify_error, additional_info.join(", ")].compact.join(' ')
         end
 
         def legacy_format_host(ca, host, type, info, width)
@@ -222,9 +224,9 @@ module Puppet
           list.each do |host|
             puts "Signing certificate request for:"
             info = Puppet::SSL::CertificateRequest.indirection.find(host)
-            puts legacy_format_host(ca, host, :request, info, host.length + 2)
+            puts new_format_host(ca, host, :request, info, host.length + 2)
             if @options[:interactive] && !@options[:yes]
-              puts "Sign Certificate Request? [Y/n]"
+              puts "Sign Certificate Request? [y/N]"
               if STDIN.gets =~ /[yY]/
                 ca.sign(host, options[:allow_dns_alt_names])
               else

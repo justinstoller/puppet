@@ -102,7 +102,7 @@ class Puppet::Application::Cert < Puppet::Application
     options[:interactive] = true
   end
 
-  option("--yes", "-y") do |value|
+  option("--yes", "-y", "--non-interactive", "-I") do |value|
     options[:yes] = true
   end
 
@@ -172,7 +172,8 @@ The most important actions for day-to-day use are 'list' and 'sign'.
   needs to be restarted after revoking certificates.
 
 * sign:
-  Sign an outstanding certificate request.
+  Sign an outstanding certificate request. Defaults to interactively prompting
+  whether to continue, use '--non-interactive' or '-I' to skip prompting.
 
 * verify:
   Verify the named certificate against the local CA certificate.

@@ -59,7 +59,7 @@ module Puppet
 
             # Sign all waiting certs
             step "Master: sign all certs"
-            on master, puppet("cert --sign --all"), :acceptable_exit_codes => [0,24]
+            on master, puppet("cert --sign --all -I"), :acceptable_exit_codes => [0,24]
 
             step "Agents: Run agent --test second time to obtain signed cert"
             on agents, puppet("agent --test --server #{master}"), :acceptable_exit_codes => [0,2]
