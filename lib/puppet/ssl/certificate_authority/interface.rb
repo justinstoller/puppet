@@ -63,7 +63,7 @@ module Puppet
           self.subjects = options.delete(:to)
           @digest = options.delete(:digest)
           @options = options
-          @options[:output] ||= []
+          @options[:output] ||= ['attrs', 'exts']
         end
 
         # List the hosts.
@@ -125,10 +125,14 @@ module Puppet
         end
 
         def new_format_host(ca, host, type, info, width)
+          with_fingerprint = @options[:output].include?('fingerprint') || @options[:verbose]
+          with_attrs = @options[:output].include?('attrs') || @options[:verbose]
+          with_exts = @options[:output].include?('exts') || @options[:verbose]
+
           cert, verify_error = info
           glyph = CERT_STATE_GLYPHS[type]
           name  = host.inspect.ljust(width)
-          fingerprint = @options[:output].include?('fingerprint') ? cert.digest(@digest).to_s : nil
+          fingerprint = with_fingerprint ? cert.digest(@digest).to_s : nil
 
           attrs = cert.respond_to?(:custom_attributes) ? cert.custom_attributes : []
           exts = cert.respond_to?(:request_extensions) ? cert.request_extensions : []
@@ -142,8 +146,8 @@ module Puppet
           alt_names = cert.respond_to?(:subject_alt_names) ? cert.subject_alt_names : []
 
           extensions = []
-          extensions += attrs if @options[:output].include?('attrs')
-          extensions += exts if @options[:output].include?('exts')
+          extensions += attrs if with_attrs
+          extensions += exts if with_exts
           extensions += base if @options[:output].include?('base')
 
           translation_method = {
