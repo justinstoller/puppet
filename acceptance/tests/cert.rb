@@ -1,7 +1,7 @@
 require 'securerandom'
 require 'digest'
 
-WHITELIST =  %w{uuid password image dept user proj role auth_role auth}
+WHITELIST =  %w{uuid password image dept user proj role auth_role auth epic}
 def custom_attribute_content(role = 'webserver',
                              auth_role = 'puppet infrastructure',
                              user = 'Justin Stoller',
@@ -15,6 +15,7 @@ def custom_attribute_content(role = 'webserver',
   custom_attributes << "  1.3.6.1.4.1.34380.1.3.13: '#{auth_role}'\n" if whitelist.include?('auth_role')
   custom_attributes << "  1.3.6.1.4.1.34380.1.3.1: 'true'\n" if whitelist.include?('auth')
   custom_attributes << "extension_requests:\n"
+  custom_attributes << "  1.3.6.1.4.1.34380.1.2.1.2: 'SERVER-1305'\n" if whitelist.include?('epic')
   custom_attributes << "  pp_image_name: 'redhat-7-x86_64'\n" if whitelist.include?('image')
   custom_attributes << "  pp_department: 'Engineering'\n" if whitelist.include?('dept')
   custom_attributes << "  pp_employee: '#{user}'\n" if whitelist.include?('user')
@@ -24,16 +25,19 @@ def custom_attribute_content(role = 'webserver',
   custom_attributes
 end
 
-def create_non_root_agent(host, name, custom_cert_info)
+def create_non_root_agent(host, name, custom_cert_info, altnames = false)
   on host, "useradd -Um #{name}"
   on host, "mkdir -p /home/#{name}/.puppetlabs/etc/puppet"
   create_remote_file(host,
                      "/home/#{name}/.puppetlabs/etc/puppet/csr_attributes.yaml",
                      custom_cert_info)
 
+  puppetconf = "[agent]\n  server = #{master}\n  certname = #{name}.delivery.puppetlabs.net"
+  puppetconf << "\n  dns_alt_names = puppet,#{altnames}" if altnames
+
   create_remote_file(host,
                      "/home/#{name}/.puppetlabs/etc/puppet/puppet.conf",
-                     "[agent]\n  server=#{master}\n  certname=#{name}.delivery.puppetlabs.net")
+                     puppetconf)
 
   on host, "chown -R #{name}:#{name} /home/#{name}"
   on host, "su - #{name} -c 'puppet agent -t --debug'", :acceptable_exit_codes => [0,1]
@@ -73,7 +77,11 @@ EOF
 
   step "Create revoked Certs" do
     create_csr(master, 'compile master')
-    create_csr(master, 'master of masters')
+
+    name = "pp" + @user_index.to_s
+    custom_cert_info = custom_attribute_content("master of masters")
+    create_non_root_agent(host, name, custom_cert_info, "puppet.delivery.puppetlabs,#{master}")
+    @user_index += 1
 
     2.times { create_csr(master, 'agent') }
 
@@ -85,7 +93,7 @@ EOF
     create_non_root_agent(master, name, custom_cert_info)
     @user_index += 1
 
-    on master, puppet("cert sign --all -I")
+    on master, puppet("cert sign --all --allow-dns-alt-names -I")
     4.times do |i|
       on master, puppet("cert revoke pp#{i}.delivery.puppetlabs.net")
     end
@@ -96,7 +104,7 @@ EOF
     2.times { create_csr(master, 'compile master') }
     create_csr(master, 'puppetdb')
     create_csr(master, 'dashboard')
-    10.times { create_csr(master, 'agent') }
+    4.times { create_csr(master, 'agent') }
 
     name = "pp" + @user_index.to_s
     custom_cert_info =
@@ -110,16 +118,12 @@ EOF
   end
 
   step "Create pending CSRs" do
-    3.times { create_csr(master, 'agent') }
+    1.times { create_csr(master, 'agent') }
     create_csr(master, 'compile master')
-    create_csr(master, 'master of masters')
 
     name = "pp" + @user_index.to_s
-    custom_cert_info =
-      custom_attribute_content('app-frontend',
-                               'general infrastructure',
-                               'Joe Q Employee')
-    create_non_root_agent(master, name, custom_cert_info)
+    custom_cert_info = custom_attribute_content("master of masters")
+    create_non_root_agent(host, name, custom_cert_info, "puppet.delivery.puppetlabs,#{master}")
     @user_index += 1
 
     name = "pp" + @user_index.to_s
@@ -130,18 +134,21 @@ EOF
     create_non_root_agent(master, name, custom_cert_info)
     @user_index += 1
 
-    3.times do
-      name = "pp" + @user_index.to_s
-      uuid = SecureRandom.uuid
-      custom_cert_info =
-        custom_attribute_content('a host',
-                                 'infrastructure',
-                                 'Bob',
-                                 uuid,
-                                 Digest::MD5.new.hexdigest(uuid),
-                                 WHITELIST.shuffle[0,rand(9)])
-      create_non_root_agent(master, name, custom_cert_info)
-      @user_index += 1
-    end
+    name = "pp" + @user_index.to_s
+    custom_cert_info =
+      custom_attribute_content('server',
+                               'infra',
+                               'Bob',
+                               'nope',
+                               "1" * 32,
+                               %w{password user role auth_role})
+    create_non_root_agent(master, name, custom_cert_info)
+    @user_index += 1
+
+    name = "pp" + @user_index.to_s
+    custom_cert_info =
+      custom_attribute_content('nope', 'nope', 'nope', 'nope', 'nope', [])
+    create_non_root_agent(master, name, custom_cert_info)
+    @user_index += 1
   end
 end
