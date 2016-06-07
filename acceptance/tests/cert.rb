@@ -1,7 +1,7 @@
 require 'securerandom'
 require 'digest'
 
-WHITELIST =  %w{uuid password image dept user proj role auth_role auth epic}
+WHITELIST =  %w{uuid password dept user proj role auth_role auth epic}
 def custom_attribute_content(role = 'webserver',
                              auth_role = 'puppet infrastructure',
                              user = 'Justin Stoller',
@@ -16,7 +16,6 @@ def custom_attribute_content(role = 'webserver',
   custom_attributes << "  1.3.6.1.4.1.34380.1.3.1: 'true'\n" if whitelist.include?('auth')
   custom_attributes << "extension_requests:\n"
   custom_attributes << "  1.3.6.1.4.1.34380.1.2.1.2: 'SERVER-1305'\n" if whitelist.include?('epic')
-  custom_attributes << "  pp_image_name: 'redhat-7-x86_64'\n" if whitelist.include?('image')
   custom_attributes << "  pp_department: 'Engineering'\n" if whitelist.include?('dept')
   custom_attributes << "  pp_employee: '#{user}'\n" if whitelist.include?('user')
   custom_attributes << "  pp_project: 'Puppet Server'\n" if whitelist.include?('proj')
@@ -80,7 +79,7 @@ EOF
 
     name = "pp" + @user_index.to_s
     custom_cert_info = custom_attribute_content("master of masters")
-    create_non_root_agent(host, name, custom_cert_info, "puppet.delivery.puppetlabs,#{master}")
+    create_non_root_agent(master, name, custom_cert_info, "puppet.delivery.puppetlabs,#{master}")
     @user_index += 1
 
     2.times { create_csr(master, 'agent') }
@@ -119,20 +118,6 @@ EOF
 
   step "Create pending CSRs" do
     1.times { create_csr(master, 'agent') }
-    create_csr(master, 'compile master')
-
-    name = "pp" + @user_index.to_s
-    custom_cert_info = custom_attribute_content("master of masters")
-    create_non_root_agent(host, name, custom_cert_info, "puppet.delivery.puppetlabs,#{master}")
-    @user_index += 1
-
-    name = "pp" + @user_index.to_s
-    custom_cert_info =
-      custom_attribute_content('app-frontend',
-                               'general infrastructure',
-                               'Joe Q Employee')
-    create_non_root_agent(master, name, custom_cert_info)
-    @user_index += 1
 
     name = "pp" + @user_index.to_s
     custom_cert_info =
@@ -145,9 +130,24 @@ EOF
     create_non_root_agent(master, name, custom_cert_info)
     @user_index += 1
 
+    create_csr(master, 'compile master')
+
+    name = "pp" + @user_index.to_s
+    custom_cert_info = custom_attribute_content("master of masters")
+    create_non_root_agent(master, name, custom_cert_info, "puppet.delivery.puppetlabs,#{master}")
+    @user_index += 1
+
     name = "pp" + @user_index.to_s
     custom_cert_info =
       custom_attribute_content('nope', 'nope', 'nope', 'nope', 'nope', [])
+    create_non_root_agent(master, name, custom_cert_info)
+    @user_index += 1
+
+    name = "pp" + @user_index.to_s
+    custom_cert_info =
+      custom_attribute_content('app-frontend',
+                               'general infrastructure',
+                               'Joe Q Employee')
     create_non_root_agent(master, name, custom_cert_info)
     @user_index += 1
   end

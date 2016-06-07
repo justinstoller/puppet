@@ -226,7 +226,7 @@ module Puppet
             info = Puppet::SSL::CertificateRequest.indirection.find(host)
             puts new_format_host(ca, host, :request, info, host.length + 2)
             if @options[:interactive] && !@options[:yes]
-              puts "Sign Certificate Request? [y/N]"
+              STDOUT.print "Sign Certificate Request? [y/N] "
               if STDIN.gets =~ /[yY]/
                 ca.sign(host, options[:allow_dns_alt_names])
               else
