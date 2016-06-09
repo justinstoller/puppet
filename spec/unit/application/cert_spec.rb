@@ -52,6 +52,26 @@ describe Puppet::Application::Cert => true do
     expect(@cert_app.signed).to be_truthy
   end
 
+  it "should set human to true for --human-readable" do
+    @cert_app.handle_human_readable
+    expect(@cert_app.options[:format]).to be :human
+  end
+
+  it "should set machine to true for --machine-readable" do
+    @cert_app.handle_machine_readable
+    expect(@cert_app.options[:format]).to be :machine
+  end
+
+  it "should set interactive to true for --interactive" do
+    @cert_app.handle_interactive
+    expect(@cert_app.options[:interactive]).to be_truthy
+  end
+
+  it "should set yes to true for --assume-yes" do
+    @cert_app.handle_assume_yes
+    expect(@cert_app.options[:yes]).to be_truthy
+  end
+
   Puppet::SSL::CertificateAuthority::Interface::INTERFACE_METHODS.reject { |m| m == :destroy }.each do |method|
     it "should set cert_mode to #{method} with option --#{method}" do
       @cert_app.send("handle_#{method}".to_sym, nil)
@@ -113,6 +133,13 @@ describe Puppet::Application::Cert => true do
       @cert_app.subcommand = 'print'
       Puppet::SSL::Host.expects(:ca_location=).with(:only)
       @cert_app.setup
+    end
+
+    it "should default to machine friendly output" do
+      @cert_app.subcommand = 'list'
+      @cert_app.setup
+
+      expect(@cert_app.options[:format]).to be :machine
     end
   end
 
