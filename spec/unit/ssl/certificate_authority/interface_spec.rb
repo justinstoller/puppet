@@ -125,8 +125,8 @@ describe Puppet::SSL::CertificateAuthority::Interface do
       it "should call :generate on the CA for each host specified" do
         @applier = @class.new(:generate, :to => %w{host1 host2})
 
-        @ca.expects(:generate).with("host1", {})
-        @ca.expects(:generate).with("host2", {})
+        @ca.expects(:generate).with() {|*args| args.first == "host1" }
+        @ca.expects(:generate).with() {|*args| args.first == "host2" }
 
         @applier.apply(@ca)
       end
@@ -204,7 +204,10 @@ describe Puppet::SSL::CertificateAuthority::Interface do
         @csr = Puppet::SSL::CertificateRequest.new 'bar'
 
         @cert.stubs(:subject_alt_names).returns []
+        @cert.stubs(:custom_extensions).returns []
         @csr.stubs(:subject_alt_names).returns []
+        @csr.stubs(:custom_attributes).returns []
+        @csr.stubs(:extension_requests).returns []
 
         Puppet::SSL::Certificate.indirection.stubs(:find).returns @cert
         Puppet::SSL::CertificateRequest.indirection.stubs(:find).returns @csr
@@ -291,6 +294,50 @@ describe Puppet::SSL::CertificateAuthority::Interface do
             OUTPUT
 
           applier.apply(@ca)
+        end
+      end
+
+      describe "with custom attrbutes and extensions" do
+        before do
+          @cert1 = Puppet::SSL::Certificate.new 'foo'
+          @cert2 = Puppet::SSL::Certificate.new 'bar'
+          @csr1 = Puppet::SSL::CertificateRequest.new 'baz'
+
+          @cert1.expects(:subject_alt_names).returns ["DNS:puppet", "DNS:puppet.example.com"]
+          @csr1.expects(:subject_alt_names).returns []
+
+          @csr1.expects(:custom_attributes).returns [{'oid' => 'customAttr', 'value' => 'attrValue'}]
+          @csr1.expects(:extension_requests).returns [{'oid' => 'customExt', 'value' => 'extValue0'}]
+          @cert1.expects(:custom_extensions).returns [{'oid' => 'extName1', 'value' => 'extValue1'}]
+          @cert2.expects(:custom_extensions).returns [{'oid'=> 'extName2', 'value' => 'extValue2'}]
+
+          @cert1.stubs(:digest).returns @digest
+          @cert2.stubs(:digest).returns @digest
+          @csr1.stubs(:digest).returns @digest
+
+          @ca.unstub(:waiting?)
+          @ca.unstub(:list)
+          @ca.expects(:waiting?).returns %w{ext3}
+          @ca.expects(:list).returns(%w{ext1 ext2}).at_most(1)
+
+          Puppet::SSL::Certificate.indirection.stubs(:find).with("ext1").returns @cert1
+          Puppet::SSL::Certificate.indirection.stubs(:find).with("ext2").returns @cert2
+          Puppet::SSL::CertificateRequest.indirection.stubs(:find).with("ext3").returns @csr1
+        end
+
+        describe "using line-wise format" do
+          it "should append attributes and extensions to each line" do
+            applier = @class.new(:list, :to => %w{ext1 ext2 ext3})
+            @ca.stubs(:verify).with("ext2").raises(Puppet::SSL::CertificateAuthority::CertificateVerificationError.new(23), "certificate revoked")
+
+            applier.expects(:puts).with(<<-OUTPUT.chomp)
+  "ext3" (fingerprint) (customAttr: "attrValue", customExt: "extValue0")
++ "ext1" (fingerprint) (alt names: "DNS:puppet", "DNS:puppet.example.com", extName1: "extValue1")
+- "ext2" (fingerprint) (extName2: "extValue2") (certificate revoked)
+              OUTPUT
+
+            applier.apply(@ca)
+          end
         end
       end
     end

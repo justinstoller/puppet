@@ -8,6 +8,8 @@ module Puppet
         DESTRUCTIVE_METHODS = [:destroy, :revoke]
         SUBJECTLESS_METHODS = [:list, :reinventory]
 
+        CERT_STATUS_GLYPHS = {:signed => '+', :request => ' ', :invalid => '-'}
+
         class InterfaceError < ArgumentError; end
 
         attr_reader :method, :subjects, :digest, :options
@@ -47,6 +49,7 @@ module Puppet
           self.subjects = options.delete(:to)
           @digest = options.delete(:digest)
           @options = options
+          @options[:format] ||= :machine
         end
 
         # List the hosts.
@@ -96,16 +99,15 @@ module Puppet
             next if certs[type].empty?
 
             certs[type].map do |host,info|
-              format_host(ca, host, type, info, name_width)
+              format_host(ca, host, type, info, name_width, options[:format])
             end
           end.flatten.compact.sort.join("\n")
 
           puts output
         end
 
-        def format_host(ca, host, type, info, width)
-          cert, verify_error = info
-          alt_names = case type
+        def alt_names_for(cert, status)
+          alt_names = case status
                       when :signed
                         cert.subject_alt_names
                       when :request
@@ -114,18 +116,44 @@ module Puppet
                         []
                       end
 
-          alt_names.delete(host)
+          alt_names - [cert.name]
+        end
 
-          alt_str = "(alt names: #{alt_names.map(&:inspect).join(', ')})" unless alt_names.empty?
+        def get_formatted_attrs_and_exts(cert)
+          exts = []
+          exts += cert.custom_extensions if cert.respond_to?(:custom_extensions)
+          exts += cert.custom_attributes if cert.respond_to?(:custom_attributes)
+          exts += cert.extension_requests if cert.respond_to?(:extension_requests)
 
-          glyph = {:signed => '+', :request => ' ', :invalid => '-'}[type]
+          exts.map {|e| "#{e['oid']}: #{e['value'].inspect}" }.sort
+        end
+
+        def format_host(ca, host, type, info, width, format)
+          case format
+          when :machine
+            format_host_output_for_machines(ca, host, type, info, width)
+          when :human
+            #format_host_output_for_humans(ca, host, type, info, width)
+          end
+        end
+
+        def format_host_output_for_machines(ca, host, type, info, width)
+          cert, verify_error = info
+
+          alt_names = alt_names_for(cert, type)
+          extension_strings = get_formatted_attrs_and_exts(cert)
+
+          extension_strings.unshift("alt names: #{alt_names.map(&:inspect).join(', ')}") unless alt_names.empty?
+          metadata_string = "(#{extension_strings.join(', ')})" unless extension_strings.empty?
+
+          glyph = CERT_STATUS_GLYPHS[type]
 
           name = host.inspect.ljust(width)
           fingerprint = cert.digest(@digest).to_s
 
           explanation = "(#{verify_error})" if verify_error
 
-          [glyph, name, fingerprint, alt_str, explanation].compact.join(' ')
+          [glyph, name, fingerprint, metadata_string, explanation].compact.join(' ')
         end
 
         # Set the method to apply.
