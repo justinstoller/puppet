@@ -339,6 +339,39 @@ describe Puppet::SSL::CertificateAuthority::Interface do
             applier.apply(@ca)
           end
         end
+
+        describe "using human friendly format" do
+          it "should break attributes and extensions to separate lines" do
+            applier = @class.new(:list, :to => %w{ext1 ext2 ext3}, :format => :human)
+            @ca.stubs(:verify).with("ext2").raises(Puppet::SSL::CertificateAuthority::CertificateVerificationError.new(23), "certificate revoked")
+            t = Time.now
+            @cert1.stubs(:expiration).returns(t)
+            @cert2.stubs(:expiration).returns(t)
+
+            applier.expects(:puts).with(<<-OUTPUT)
+  "ext3"
+  (fingerprint)
+    Status: Request Pending
+    Extensions:
+      customAttr: "attrValue"
+      customExt: "extValue0"
+
++ "ext1"
+  (fingerprint)
+    Status: Signed
+    Expiration: #{t.iso8601}
+    Extensions:
+      alt names: "DNS:puppet", "DNS:puppet.example.com"
+      extName1: "extValue1"
+
+- "ext2"
+  (fingerprint)
+    Status: Invalid - certificate revoked
+OUTPUT
+
+            applier.apply(@ca)
+          end
+        end
       end
     end
 

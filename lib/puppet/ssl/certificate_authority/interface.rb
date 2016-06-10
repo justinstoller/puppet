@@ -133,7 +133,7 @@ module Puppet
           when :machine
             format_host_output_for_machines(ca, host, type, info, width)
           when :human
-            #format_host_output_for_humans(ca, host, type, info, width)
+            format_host_output_for_humans(ca, host, type, info, width)
           end
         end
 
@@ -154,6 +154,37 @@ module Puppet
           explanation = "(#{verify_error})" if verify_error
 
           [glyph, name, fingerprint, metadata_string, explanation].compact.join(' ')
+        end
+
+        def format_host_output_for_humans(ca, host, type, info, width)
+          cert, verify_error = info
+
+          alt_names = alt_names_for(cert, type)
+          extension_strings = get_formatted_attrs_and_exts(cert)
+
+          extension_strings.unshift("alt names: #{alt_names.map(&:inspect).join(', ')}") unless alt_names.empty?
+
+          glyph = CERT_STATUS_GLYPHS[type]
+
+          fingerprint = cert.digest(@digest).to_s
+
+          extensions = "\n    Extensions:\n      "
+          extensions << extension_strings.join("\n      ")
+
+          status = case type
+                   when :invalid then "Invalid - #{verify_error}"
+                   when :request then "Request Pending"
+                   when :signed then "Signed"
+                   end
+
+          output = "#{glyph} #{host.inspect}"
+          output << "\n  #{fingerprint}"
+          output << "\n    Status: #{status}"
+          output << "\n    Expiration: #{cert.expiration.iso8601}" if type == :signed
+          output << extensions if type != :invalid && !extension_strings.empty?
+          output << "\n"
+
+          output
         end
 
         # Set the method to apply.
