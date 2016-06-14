@@ -174,7 +174,7 @@ describe Puppet::SSL::CertificateAuthority::Interface do
 
           @applier.expects(:puts).with(<<-OUTPUT.chomp)
 Signing Certificate Request for:
-  "csr1" (fingerprint) (customAttr: "attrValue", customExt: "extValue0")
+  "csr1" (fingerprint) **
           OUTPUT
 
           STDOUT.expects(:print).with(<<-OUTPUT.chomp)
@@ -204,7 +204,7 @@ Sign Certificate Request? [y/N]
 
           @applier.expects(:puts).with(<<-OUTPUT.chomp)
 Signing Certificate Request for:
-  "csr1" (fingerprint) (customAttr: "attrValue", customExt: "extValue0")
+  "csr1" (fingerprint) **
           OUTPUT
 
           STDOUT.expects(:print).with(<<-OUTPUT.chomp)
@@ -375,6 +375,8 @@ Sign Certificate Request? [y/N]
           @cert1 = Puppet::SSL::Certificate.new 'foo'
           @cert2 = Puppet::SSL::Certificate.new 'bar'
           @csr1 = Puppet::SSL::CertificateRequest.new 'baz'
+          @expiration = mock('time')
+          @expiration.stubs(:iso8601).returns("(expiration)")
 
           @cert1 = Puppet::SSL::Certificate.new 'foo'
           @cert1.expects(:subject_alt_names).returns ["DNS:puppet", "DNS:puppet.example.com"]
@@ -389,6 +391,9 @@ Sign Certificate Request? [y/N]
           @cert2.stubs(:digest).returns @digest
           @csr1.stubs(:digest).returns @digest
 
+          @cert1.stubs(:expiration).returns(@expiration)
+          @cert2.stubs(:expiration).returns(@expiration)
+
           @ca.unstub(:waiting?)
           @ca.unstub(:list)
           @ca.expects(:waiting?).returns %w{ext3}
@@ -399,15 +404,43 @@ Sign Certificate Request? [y/N]
           Puppet::SSL::CertificateRequest.indirection.stubs(:find).with("ext3").returns @csr1
         end
 
-        describe "using line-wise format" do
-          it "should append attributes and extensions to each line" do
+        describe "using legacy format" do
+          it "should append astrisks to end of line to denote additional information available" do
             applier = @class.new(:list, :to => %w{ext1 ext2 ext3})
             @ca.stubs(:verify).with("ext2").raises(Puppet::SSL::CertificateAuthority::CertificateVerificationError.new(23), "certificate revoked")
 
             applier.expects(:puts).with(<<-OUTPUT.chomp)
+  "ext3" (fingerprint) **
++ "ext1" (fingerprint) (alt names: "DNS:puppet", "DNS:puppet.example.com") **
+- "ext2" (fingerprint) (certificate revoked)
+              OUTPUT
+
+            applier.apply(@ca)
+          end
+
+          it "should append attributes and extensions to end of line when running :verbose" do
+            applier = @class.new(:list, :to => %w{ext1 ext2 ext3}, :verbose => true)
+            @ca.stubs(:verify).with("ext2").raises(Puppet::SSL::CertificateAuthority::CertificateVerificationError.new(23), "certificate revoked")
+
+            applier.expects(:puts).with(<<-OUTPUT.chomp)
   "ext3" (fingerprint) (customAttr: "attrValue", customExt: "extValue0")
-+ "ext1" (fingerprint) (alt names: "DNS:puppet", "DNS:puppet.example.com", extName1: "extValue1")
-- "ext2" (fingerprint) (extName2: "extValue2") (certificate revoked)
++ "ext1" (fingerprint) (expiration) (alt names: "DNS:puppet", "DNS:puppet.example.com", extName1: "extValue1")
+- "ext2" (fingerprint) (certificate revoked)
+              OUTPUT
+
+            applier.apply(@ca)
+          end
+        end
+
+        describe "using line-wise format" do
+          it "use the same format as :verbose legacy format" do
+            applier = @class.new(:list, :to => %w{ext1 ext2 ext3}, :format => :machine)
+            @ca.stubs(:verify).with("ext2").raises(Puppet::SSL::CertificateAuthority::CertificateVerificationError.new(23), "certificate revoked")
+
+            applier.expects(:puts).with(<<-OUTPUT.chomp)
+  "ext3" (fingerprint) (customAttr: "attrValue", customExt: "extValue0")
++ "ext1" (fingerprint) (expiration) (alt names: "DNS:puppet", "DNS:puppet.example.com", extName1: "extValue1")
+- "ext2" (fingerprint) (certificate revoked)
               OUTPUT
 
             applier.apply(@ca)
@@ -418,9 +451,6 @@ Sign Certificate Request? [y/N]
           it "should break attributes and extensions to separate lines" do
             applier = @class.new(:list, :to => %w{ext1 ext2 ext3}, :format => :human)
             @ca.stubs(:verify).with("ext2").raises(Puppet::SSL::CertificateAuthority::CertificateVerificationError.new(23), "certificate revoked")
-            t = Time.now
-            @cert1.stubs(:expiration).returns(t)
-            @cert2.stubs(:expiration).returns(t)
 
             applier.expects(:puts).with(<<-OUTPUT)
   "ext3"
@@ -433,7 +463,7 @@ Sign Certificate Request? [y/N]
 + "ext1"
   (fingerprint)
     Status: Signed
-    Expiration: #{t.iso8601}
+    Expiration: (expiration)
     Extensions:
       alt names: "DNS:puppet", "DNS:puppet.example.com"
       extName1: "extValue1"

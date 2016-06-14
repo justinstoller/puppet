@@ -49,7 +49,6 @@ module Puppet
           self.subjects = options.delete(:to)
           @digest = options.delete(:digest)
           @options = options
-          @options[:format] ||= :machine
         end
 
         # List the hosts.
@@ -134,6 +133,12 @@ module Puppet
             format_host_output_for_machines(ca, host, type, info, width)
           when :human
             format_host_output_for_humans(ca, host, type, info, width)
+          else
+            if options[:verbose]
+              format_host_output_for_machines(ca, host, type, info, width)
+            else
+              format_host_output_legacy(ca, host, type, info, width)
+            end
           end
         end
 
@@ -144,7 +149,8 @@ module Puppet
           extension_strings = get_formatted_attrs_and_exts(cert)
 
           extension_strings.unshift("alt names: #{alt_names.map(&:inspect).join(', ')}") unless alt_names.empty?
-          metadata_string = "(#{extension_strings.join(', ')})" unless extension_strings.empty?
+          metadata_string = "(#{extension_strings.join(', ')})" unless extension_strings.empty? || type == :invalid
+          expiration = cert.expiration.iso8601 if type == :signed
 
           glyph = CERT_STATUS_GLYPHS[type]
 
@@ -153,7 +159,7 @@ module Puppet
 
           explanation = "(#{verify_error})" if verify_error
 
-          [glyph, name, fingerprint, metadata_string, explanation].compact.join(' ')
+          [glyph, name, fingerprint, expiration, metadata_string, explanation].compact.join(' ')
         end
 
         def format_host_output_for_humans(ca, host, type, info, width)
@@ -185,6 +191,25 @@ module Puppet
           output << "\n"
 
           output
+        end
+
+        def format_host_output_legacy(ca, host, type, info, width)
+          cert, verify_error = info
+
+          alt_names = alt_names_for(cert, type)
+          extension_strings = get_formatted_attrs_and_exts(cert)
+
+          alt_name_string = "(alt names: #{alt_names.map(&:inspect).join(', ')})" unless alt_names.empty?
+          metadata_string = "**" unless extension_strings.empty? || type == :invalid
+
+          glyph = CERT_STATUS_GLYPHS[type]
+
+          name = host.inspect.ljust(width)
+          fingerprint = cert.digest(@digest).to_s
+
+          explanation = "(#{verify_error})" if verify_error
+
+          [glyph, name, fingerprint, alt_name_string, explanation, metadata_string].compact.join(' ')
         end
 
         # Set the method to apply.

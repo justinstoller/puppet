@@ -287,9 +287,6 @@ Copyright (c) 2011 Puppet Labs, LLC Licensed under the Apache 2.0 License
       end
     end
 
-    # Default where applicable to a machine parsable, line-wise formatted output
-    options[:format] ||= :machine
-
     begin
       @ca = Puppet::SSL::CertificateAuthority.new
     rescue => detail
