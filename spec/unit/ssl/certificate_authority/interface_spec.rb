@@ -272,21 +272,33 @@ Sign Certificate Request? [y/N]
     end
 
     describe ":list" do
+      let(:signed_alt_names) { [] }
+      let(:request_alt_names) { [] }
+      let(:custom_attrs) { [] }
+      let(:ext_requests) { [] }
+      let(:custom_exts) { [] }
+
       before :each do
         @cert = Puppet::SSL::Certificate.new 'foo'
         @csr = Puppet::SSL::CertificateRequest.new 'bar'
 
-        @cert.stubs(:subject_alt_names).returns []
-        @cert.stubs(:custom_extensions).returns []
-        @csr.stubs(:subject_alt_names).returns []
-        @csr.stubs(:custom_attributes).returns []
-        @csr.stubs(:extension_requests).returns []
+        @cert.stubs(:subject_alt_names).returns signed_alt_names
+        @cert.stubs(:custom_extensions).returns custom_exts
+
+        @csr.stubs(:subject_alt_names).returns request_alt_names
+        @csr.stubs(:custom_attributes).returns custom_attrs
+        @csr.stubs(:extension_requests).returns ext_requests
 
         Puppet::SSL::Certificate.indirection.stubs(:find).returns @cert
         Puppet::SSL::CertificateRequest.indirection.stubs(:find).returns @csr
 
         @digest = mock("digest")
         @digest.stubs(:to_s).returns("(fingerprint)")
+
+        @expiration = mock('time')
+        @expiration.stubs(:iso8601).returns("(expiration)")
+        @cert.stubs(:expiration).returns(@expiration)
+
         @ca.expects(:waiting?).returns %w{host1 host2 host3}
         @ca.expects(:list).returns(%w{host4 host5 host6}).at_most(1)
         @csr.stubs(:digest).returns @digest
@@ -371,43 +383,28 @@ Sign Certificate Request? [y/N]
       end
 
       describe "with custom attrbutes and extensions" do
+        let(:custom_attrs) { [{'oid' => 'customAttr', 'value' => 'attrValue'}] }
+        let(:ext_requests) { [{'oid' => 'customExt', 'value' => 'reqExtValue'}] }
+        let(:custom_exts) {  [{'oid' => 'extName', 'value' => 'extValue'}] }
+        let(:signed_alt_names) { ["DNS:puppet", "DNS:puppet.example.com"] }
+
         before do
-          @cert1 = Puppet::SSL::Certificate.new 'foo'
-          @cert2 = Puppet::SSL::Certificate.new 'bar'
-          @csr1 = Puppet::SSL::CertificateRequest.new 'baz'
-          @expiration = mock('time')
-          @expiration.stubs(:iso8601).returns("(expiration)")
-
-          @cert1 = Puppet::SSL::Certificate.new 'foo'
-          @cert1.expects(:subject_alt_names).returns ["DNS:puppet", "DNS:puppet.example.com"]
-          @csr1.expects(:subject_alt_names).returns []
-
-          @csr1.expects(:custom_attributes).returns [{'oid' => 'customAttr', 'value' => 'attrValue'}]
-          @csr1.expects(:extension_requests).returns [{'oid' => 'customExt', 'value' => 'extValue0'}]
-          @cert1.expects(:custom_extensions).returns [{'oid' => 'extName1', 'value' => 'extValue1'}]
-          @cert2.expects(:custom_extensions).returns [{'oid'=> 'extName2', 'value' => 'extValue2'}]
-
-          @cert1.stubs(:digest).returns @digest
-          @cert2.stubs(:digest).returns @digest
-          @csr1.stubs(:digest).returns @digest
-
-          @cert1.stubs(:expiration).returns(@expiration)
-          @cert2.stubs(:expiration).returns(@expiration)
-
           @ca.unstub(:waiting?)
           @ca.unstub(:list)
           @ca.expects(:waiting?).returns %w{ext3}
           @ca.expects(:list).returns(%w{ext1 ext2}).at_most(1)
 
-          Puppet::SSL::Certificate.indirection.stubs(:find).with("ext1").returns @cert1
-          Puppet::SSL::Certificate.indirection.stubs(:find).with("ext2").returns @cert2
-          Puppet::SSL::CertificateRequest.indirection.stubs(:find).with("ext3").returns @csr1
+          @ca.stubs(:verify).with("ext2").
+            raises(Puppet::SSL::CertificateAuthority::CertificateVerificationError.new(23),
+                   "certificate revoked")
+
+          Puppet::SSL::Certificate.indirection.stubs(:find).returns @cert
+          Puppet::SSL::CertificateRequest.indirection.stubs(:find).returns @csr
         end
 
         describe "using legacy format" do
           it "should append astrisks to end of line to denote additional information available" do
             applier = @class.new(:list, :to => %w{ext1 ext2 ext3})
-            @ca.stubs(:verify).with("ext2").raises(Puppet::SSL::CertificateAuthority::CertificateVerificationError.new(23), "certificate revoked")
 
             applier.expects(:puts).with(<<-OUTPUT.chomp)
   "ext3" (fingerprint) **
@@ -420,11 +417,10 @@ Sign Certificate Request? [y/N]
 
           it "should append attributes and extensions to end of line when running :verbose" do
             applier = @class.new(:list, :to => %w{ext1 ext2 ext3}, :verbose => true)
-            @ca.stubs(:verify).with("ext2").raises(Puppet::SSL::CertificateAuthority::CertificateVerificationError.new(23), "certificate revoked")
 
             applier.expects(:puts).with(<<-OUTPUT.chomp)
-  "ext3" (fingerprint) (customAttr: "attrValue", customExt: "extValue0")
-+ "ext1" (fingerprint) (expiration) (alt names: "DNS:puppet", "DNS:puppet.example.com", extName1: "extValue1")
+  "ext3" (fingerprint) (customAttr: "attrValue", customExt: "reqExtValue")
++ "ext1" (fingerprint) (expiration) (alt names: "DNS:puppet", "DNS:puppet.example.com", extName: "extValue")
 - "ext2" (fingerprint) (certificate revoked)
               OUTPUT
 
@@ -435,11 +431,10 @@ Sign Certificate Request? [y/N]
         describe "using line-wise format" do
           it "use the same format as :verbose legacy format" do
             applier = @class.new(:list, :to => %w{ext1 ext2 ext3}, :format => :machine)
-            @ca.stubs(:verify).with("ext2").raises(Puppet::SSL::CertificateAuthority::CertificateVerificationError.new(23), "certificate revoked")
 
             applier.expects(:puts).with(<<-OUTPUT.chomp)
-  "ext3" (fingerprint) (customAttr: "attrValue", customExt: "extValue0")
-+ "ext1" (fingerprint) (expiration) (alt names: "DNS:puppet", "DNS:puppet.example.com", extName1: "extValue1")
+  "ext3" (fingerprint) (customAttr: "attrValue", customExt: "reqExtValue")
++ "ext1" (fingerprint) (expiration) (alt names: "DNS:puppet", "DNS:puppet.example.com", extName: "extValue")
 - "ext2" (fingerprint) (certificate revoked)
               OUTPUT
 
@@ -450,7 +445,6 @@ Sign Certificate Request? [y/N]
         describe "using human friendly format" do
           it "should break attributes and extensions to separate lines" do
             applier = @class.new(:list, :to => %w{ext1 ext2 ext3}, :format => :human)
-            @ca.stubs(:verify).with("ext2").raises(Puppet::SSL::CertificateAuthority::CertificateVerificationError.new(23), "certificate revoked")
 
             applier.expects(:puts).with(<<-OUTPUT)
   "ext3"
@@ -458,7 +452,7 @@ Sign Certificate Request? [y/N]
     Status: Request Pending
     Extensions:
       customAttr: "attrValue"
-      customExt: "extValue0"
+      customExt: "reqExtValue"
 
 + "ext1"
   (fingerprint)
@@ -466,7 +460,7 @@ Sign Certificate Request? [y/N]
     Expiration: (expiration)
     Extensions:
       alt names: "DNS:puppet", "DNS:puppet.example.com"
-      extName1: "extValue1"
+      extName: "extValue"
 
 - "ext2"
   (fingerprint)
