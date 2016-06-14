@@ -157,29 +157,22 @@ describe Puppet::SSL::CertificateAuthority::Interface do
 
     describe ":sign" do
       describe "when run in interactive mode" do
-        it "should prompt before signing cert" do
+        before do
           @csr1 = Puppet::SSL::CertificateRequest.new 'baz'
-          @digest = mock("digest")
-          @digest.stubs(:to_s).returns("(fingerprint)")
-          @csr1.stubs(:digest).returns @digest
-          @csr1.expects(:custom_attributes).returns [{'oid' => 'customAttr', 'value' => 'attrValue'}]
-          @csr1.expects(:extension_requests).returns [{'oid' => 'customExt', 'value' => 'extValue0'}]
-          @csr1.expects(:subject_alt_names).returns []
           Puppet::SSL::CertificateRequest.indirection.stubs(:find).with("csr1").returns @csr1
 
           @ca.stubs(:waiting?).returns(%w{csr1})
           @ca.stubs(:check_internal_signing_policies).returns(true)
+        end
 
+        it "should prompt before signing cert" do
           @applier = @class.new(:sign, :to => :all, :interactive => true)
+          @applier.stubs(:format_host).returns("(host info)")
 
-          @applier.expects(:puts).with(<<-OUTPUT.chomp)
-Signing Certificate Request for:
-  "csr1" (fingerprint) **
-          OUTPUT
+          @applier.expects(:puts).
+            with("Signing Certificate Request for:\n(host info)")
 
-          STDOUT.expects(:print).with(<<-OUTPUT.chomp)
-Sign Certificate Request? [y/N] 
-          OUTPUT
+          STDOUT.expects(:print).with("Sign Certificate Request? [y/N] ")
 
           STDIN.stubs(:gets).returns('y')
           @ca.expects(:sign).with("csr1", nil)
@@ -188,28 +181,13 @@ Sign Certificate Request? [y/N]
         end
 
         it "a yes answer can be assumed via options" do
-          @csr1 = Puppet::SSL::CertificateRequest.new 'baz'
-          @digest = mock("digest")
-          @digest.stubs(:to_s).returns("(fingerprint)")
-          @csr1.stubs(:digest).returns @digest
-          @csr1.expects(:custom_attributes).returns [{'oid' => 'customAttr', 'value' => 'attrValue'}]
-          @csr1.expects(:extension_requests).returns [{'oid' => 'customExt', 'value' => 'extValue0'}]
-          @csr1.expects(:subject_alt_names).returns []
-          Puppet::SSL::CertificateRequest.indirection.stubs(:find).with("csr1").returns @csr1
-
-          @ca.stubs(:waiting?).returns(%w{csr1})
-          @ca.stubs(:check_internal_signing_policies).returns(true)
-
           @applier = @class.new(:sign, :to => :all, :interactive => true, :yes => true)
+          @applier.stubs(:format_host).returns("(host info)")
 
-          @applier.expects(:puts).with(<<-OUTPUT.chomp)
-Signing Certificate Request for:
-  "csr1" (fingerprint) **
-          OUTPUT
+          @applier.expects(:puts).
+            with("Signing Certificate Request for:\n(host info)")
 
-          STDOUT.expects(:print).with(<<-OUTPUT.chomp)
-Sign Certificate Request? [y/N] 
-          OUTPUT
+          STDOUT.expects(:print).with("Sign Certificate Request? [y/N] ")
 
           @applier.expects(:puts).
             with("Assuming YES from `-y' or `--assume-yes' flag")
