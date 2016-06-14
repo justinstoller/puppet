@@ -220,7 +220,22 @@ module Puppet
           list = subjects == :all ? ca.waiting? : subjects
           raise InterfaceError, "No waiting certificate requests to sign" if list.empty?
           list.each do |host|
-            ca.sign(host, options[:allow_dns_alt_names])
+            cert = Puppet::SSL::CertificateRequest.indirection.find(host)
+
+            host_string = format_host(ca, host, :request, cert, host.inspect.length, options[:format])
+            puts "Signing Certificate Request for:\n#{host_string}"
+
+            if options[:interactive]
+              STDOUT.print "Sign Certificate Request? [y/N] "
+              input = STDIN.gets
+              if %w{y Y yes Yes YES}.include?(input)
+                ca.sign(host, options[:allow_dns_alt_names])
+              else
+                raise ArgumentError, "NOT Signing Certificate Request"
+              end
+            else
+              ca.sign(host, options[:allow_dns_alt_names])
+            end
           end
         end
 
