@@ -227,11 +227,16 @@ module Puppet
 
             if options[:interactive]
               STDOUT.print "Sign Certificate Request? [y/N] "
-              input = STDIN.gets
-              if %w{y Y yes Yes YES}.include?(input)
+              if options[:yes]
+                puts "Assuming YES from `-y' or `--assume-yes' flag"
                 ca.sign(host, options[:allow_dns_alt_names])
               else
-                raise ArgumentError, "NOT Signing Certificate Request"
+                input = STDIN.gets
+                if %w{y Y yes Yes YES}.include?(input)
+                  ca.sign(host, options[:allow_dns_alt_names])
+                else
+                  raise ArgumentError, "NOT Signing Certificate Request"
+                end
               end
             else
               ca.sign(host, options[:allow_dns_alt_names])

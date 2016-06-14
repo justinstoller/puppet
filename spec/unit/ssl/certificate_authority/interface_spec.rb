@@ -184,6 +184,36 @@ Sign Certificate Request? [y/N]
 
           @applier.apply(@ca)
         end
+
+        it "a yes answer can be assumed via options" do
+          @csr1 = Puppet::SSL::CertificateRequest.new 'baz'
+          @digest = mock("digest")
+          @digest.stubs(:to_s).returns("(fingerprint)")
+          @csr1.stubs(:digest).returns @digest
+          @csr1.expects(:custom_attributes).returns [{'oid' => 'customAttr', 'value' => 'attrValue'}]
+          @csr1.expects(:extension_requests).returns [{'oid' => 'customExt', 'value' => 'extValue0'}]
+          @csr1.expects(:subject_alt_names).returns []
+          Puppet::SSL::CertificateRequest.indirection.stubs(:find).with("csr1").returns @csr1
+
+          @ca.stubs(:waiting?).returns(%w{csr1})
+          @applier = @class.new(:sign, :to => :all, :interactive => true, :yes => true)
+
+          @applier.expects(:puts).with(<<-OUTPUT.chomp)
+Signing Certificate Request for:
+  "csr1" (fingerprint) (customAttr: "attrValue", customExt: "extValue0")
+          OUTPUT
+
+          STDOUT.expects(:print).with(<<-OUTPUT.chomp)
+Sign Certificate Request? [y/N] 
+          OUTPUT
+
+          @applier.expects(:puts).
+            with("Assuming YES from `-y' or `--assume-yes' flag")
+
+          @ca.expects(:sign).with("csr1", nil)
+
+          @applier.apply(@ca)
+        end
       end
 
       describe "and an array of names was provided" do
@@ -192,6 +222,7 @@ Sign Certificate Request? [y/N]
         it "should sign the specified waiting certificate requests" do
           @options = {:allow_dns_alt_names => false}
           applier.stubs(:format_host).returns("")
+          applier.stubs(:puts)
 
           @ca.expects(:sign).with("host1", false)
           @ca.expects(:sign).with("host2", false)
@@ -202,6 +233,7 @@ Sign Certificate Request? [y/N]
         it "should sign the certificate requests with alt names if specified" do
           @options = {:allow_dns_alt_names => true}
           applier.stubs(:format_host).returns("")
+          applier.stubs(:puts)
 
           @ca.expects(:sign).with("host1", true)
           @ca.expects(:sign).with("host2", true)
@@ -219,6 +251,7 @@ Sign Certificate Request? [y/N]
 
           @applier = @class.new(:sign, :to => :all)
           @applier.stubs(:format_host).returns("")
+          @applier.stubs(:puts)
           @applier.apply(@ca)
         end
 
