@@ -222,6 +222,11 @@ module Puppet
           list.each do |host|
             cert = Puppet::SSL::CertificateRequest.indirection.find(host)
 
+            # ca.sign will also do this - and it should if it is called
+            # elsewhere - but we want to reject an attempt to sign a
+            # problematic csr as early as possible for usability.
+            ca.check_internal_signing_policies(host, cert, options[:allow_dns_alt_names])
+
             host_string = format_host(ca, host, :request, cert, host.inspect.length, options[:format])
             puts "Signing Certificate Request for:\n#{host_string}"
 

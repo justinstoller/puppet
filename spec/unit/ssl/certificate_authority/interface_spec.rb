@@ -168,6 +168,8 @@ describe Puppet::SSL::CertificateAuthority::Interface do
           Puppet::SSL::CertificateRequest.indirection.stubs(:find).with("csr1").returns @csr1
 
           @ca.stubs(:waiting?).returns(%w{csr1})
+          @ca.stubs(:check_internal_signing_policies).returns(true)
+
           @applier = @class.new(:sign, :to => :all, :interactive => true)
 
           @applier.expects(:puts).with(<<-OUTPUT.chomp)
@@ -196,6 +198,8 @@ Sign Certificate Request? [y/N]
           Puppet::SSL::CertificateRequest.indirection.stubs(:find).with("csr1").returns @csr1
 
           @ca.stubs(:waiting?).returns(%w{csr1})
+          @ca.stubs(:check_internal_signing_policies).returns(true)
+
           @applier = @class.new(:sign, :to => :all, :interactive => true, :yes => true)
 
           @applier.expects(:puts).with(<<-OUTPUT.chomp)
@@ -223,6 +227,7 @@ Sign Certificate Request? [y/N]
           @options = {:allow_dns_alt_names => false}
           applier.stubs(:format_host).returns("")
           applier.stubs(:puts)
+          @ca.stubs(:check_internal_signing_policies).returns(true)
 
           @ca.expects(:sign).with("host1", false)
           @ca.expects(:sign).with("host2", false)
@@ -234,6 +239,7 @@ Sign Certificate Request? [y/N]
           @options = {:allow_dns_alt_names => true}
           applier.stubs(:format_host).returns("")
           applier.stubs(:puts)
+          @ca.stubs(:check_internal_signing_policies).returns(true)
 
           @ca.expects(:sign).with("host1", true)
           @ca.expects(:sign).with("host2", true)
@@ -245,6 +251,7 @@ Sign Certificate Request? [y/N]
       describe "and :all was provided" do
         it "should sign all waiting certificate requests" do
           @ca.stubs(:waiting?).returns(%w{cert1 cert2})
+          @ca.stubs(:check_internal_signing_policies).returns(true)
 
           @ca.expects(:sign).with("cert1", nil)
           @ca.expects(:sign).with("cert2", nil)
