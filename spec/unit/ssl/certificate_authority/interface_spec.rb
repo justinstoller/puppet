@@ -442,7 +442,7 @@ describe Puppet::SSL::CertificateAuthority::Interface do
 
 - "ext2"
   (fingerprint)
-    Status: Invalid - certificate revoked
+    Status: Invalid - (certificate revoked)
 OUTPUT
 
             applier.apply(@ca)

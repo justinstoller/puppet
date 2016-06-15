@@ -73,19 +73,30 @@ module Puppet
           return if hosts.empty?
 
           hosts.uniq.sort.each do |host|
+            verify_error = nil
+
             begin
               ca.verify(host) unless requests.include?(host)
             rescue Puppet::SSL::CertificateAuthority::CertificateVerificationError => details
-              verify_error = details.to_s
+              verify_error = "(#{details.to_s})"
             end
 
             if verify_error
-              certs[:invalid][host] = [ Puppet::SSL::Certificate.indirection.find(host), verify_error ]
+              type = :invalid
+              cert = Puppet::SSL::Certificate.indirection.find(host)
             elsif (signed and signed.include?(host))
-              certs[:signed][host]  = Puppet::SSL::Certificate.indirection.find(host)
+              type = :signed
+              cert = Puppet::SSL::Certificate.indirection.find(host)
             else
-              certs[:request][host] = Puppet::SSL::CertificateRequest.indirection.find(host)
+              type = :request
+              cert = Puppet::SSL::CertificateRequest.indirection.find(host)
             end
+
+            certs[type][host] = {
+              :cert         => cert,
+              :type         => type,
+              :verify_error => verify_error,
+            }
           end
 
           names = certs.values.map(&:keys).flatten
@@ -97,85 +108,81 @@ module Puppet
           output = [:request, :signed, :invalid].map do |type|
             next if certs[type].empty?
 
-            certs[type].map do |host,info|
-              format_host(ca, host, type, info, name_width, options[:format])
+            certs[type].map do |host, info|
+              format_host(host, info, name_width, options[:format])
             end
           end.flatten.compact.sort.join("\n")
 
           puts output
         end
 
-        def alt_names_for(cert, status)
-          alt_names = case status
-                      when :signed
-                        cert.subject_alt_names
-                      when :request
-                        cert.subject_alt_names
-                      else
-                        []
-                      end
-
-          alt_names - [cert.name]
-        end
-
-        def get_formatted_attrs_and_exts(cert)
-          exts = []
-          exts += cert.custom_extensions if cert.respond_to?(:custom_extensions)
-          exts += cert.custom_attributes if cert.respond_to?(:custom_attributes)
-          exts += cert.extension_requests if cert.respond_to?(:extension_requests)
-
-          exts.map {|e| "#{e['oid']}: #{e['value'].inspect}" }.sort
-        end
-
-        def format_host(ca, host, type, info, width, format)
+        def format_host(host, info, width, format)
           case format
           when :machine
-            format_host_output_for_machines(ca, host, type, info, width)
+            machine_host_formatting(host, info)
           when :human
-            format_host_output_for_humans(ca, host, type, info, width)
+            human_host_formatting(host, info)
           else
             if options[:verbose]
-              format_host_output_for_machines(ca, host, type, info, width)
+              machine_host_formatting(host, info)
             else
-              format_host_output_legacy(ca, host, type, info, width)
+              legacy_host_formatting(host, info, width)
             end
           end
         end
 
-        def format_host_output_for_machines(ca, host, type, info, width)
-          cert, verify_error = info
+        def machine_host_formatting(host, info)
+          type         = info[:type]
+          verify_error = info[:verify_error]
+          cert         = info[:cert]
+          alt_names    = cert.subject_alt_names - [host]
+          extensions   = format_attrs_and_exts(cert)
 
-          alt_names = alt_names_for(cert, type)
-          extension_strings = get_formatted_attrs_and_exts(cert)
-
-          extension_strings.unshift("alt names: #{alt_names.map(&:inspect).join(', ')}") unless alt_names.empty?
-          metadata_string = "(#{extension_strings.join(', ')})" unless extension_strings.empty? || type == :invalid
-          expiration = cert.expiration.iso8601 if type == :signed
-
-          glyph = CERT_STATUS_GLYPHS[type]
-
-          name = host.inspect.ljust(width)
+          glyph       = CERT_STATUS_GLYPHS[type]
+          name        = host.inspect
           fingerprint = cert.digest(@digest).to_s
 
-          explanation = "(#{verify_error})" if verify_error
+          expiration  = cert.expiration.iso8601 if type == :signed
 
-          [glyph, name, fingerprint, expiration, metadata_string, explanation].compact.join(' ')
+          if type != :invalid
+            if !alt_names.empty?
+              extensions.unshift("alt names: #{alt_names.map(&:inspect).join(', ')}")
+            end
+
+            if !extensions.empty?
+              metadata_string = "(#{extensions.join(', ')})" unless extensions.empty?
+            end
+          end
+
+          [glyph, name, fingerprint, expiration, metadata_string, verify_error].compact.join(' ')
         end
 
-        def format_host_output_for_humans(ca, host, type, info, width)
-          cert, verify_error = info
+        def human_host_formatting(host, info)
+          type         = info[:type]
+          verify_error = info[:verify_error]
+          cert         = info[:cert]
+          alt_names    = cert.subject_alt_names - [host]
+          extensions   = format_attrs_and_exts(cert)
 
-          alt_names = alt_names_for(cert, type)
-          extension_strings = get_formatted_attrs_and_exts(cert)
-
-          extension_strings.unshift("alt names: #{alt_names.map(&:inspect).join(', ')}") unless alt_names.empty?
-
-          glyph = CERT_STATUS_GLYPHS[type]
-
+          glyph       = CERT_STATUS_GLYPHS[type]
           fingerprint = cert.digest(@digest).to_s
 
-          extensions = "\n    Extensions:\n      "
-          extensions << extension_strings.join("\n      ")
+          if type == :invalid || (extensions.empty? && alt_names.empty?)
+            extension_string = ''
+          else
+            if !alt_names.empty?
+              extensions.unshift("alt names: #{alt_names.map(&:inspect).join(', ')}")
+            end
+
+            extension_string = "\n    Extensions:\n      "
+            extension_string << extensions.join("\n      ")
+          end
+
+          if type == :signed
+            expiration_string = "\n    Expiration: #{cert.expiration.iso8601}"
+          else
+            expiration_string = ''
+          end
 
           status = case type
                    when :invalid then "Invalid - #{verify_error}"
@@ -186,30 +193,48 @@ module Puppet
           output = "#{glyph} #{host.inspect}"
           output << "\n  #{fingerprint}"
           output << "\n    Status: #{status}"
-          output << "\n    Expiration: #{cert.expiration.iso8601}" if type == :signed
-          output << extensions if type != :invalid && !extension_strings.empty?
+          output << expiration_string
+          output << extension_string
           output << "\n"
 
           output
         end
 
-        def format_host_output_legacy(ca, host, type, info, width)
-          cert, verify_error = info
+        def legacy_host_formatting(host, info, width)
+          type         = info[:type]
+          verify_error = info[:verify_error]
+          cert         = info[:cert]
+          alt_names    = cert.subject_alt_names - [host]
+          extensions   = format_attrs_and_exts(cert)
 
-          alt_names = alt_names_for(cert, type)
-          extension_strings = get_formatted_attrs_and_exts(cert)
-
-          alt_name_string = "(alt names: #{alt_names.map(&:inspect).join(', ')})" unless alt_names.empty?
-          metadata_string = "**" unless extension_strings.empty? || type == :invalid
-
-          glyph = CERT_STATUS_GLYPHS[type]
-
-          name = host.inspect.ljust(width)
+          glyph       = CERT_STATUS_GLYPHS[type]
+          name        = host.inspect.ljust(width)
           fingerprint = cert.digest(@digest).to_s
 
-          explanation = "(#{verify_error})" if verify_error
+          if type != :invalid
+            if alt_names.empty?
+              alt_name_string = nil
+            else
+              alt_name_string = "(alt names: #{alt_names.map(&:inspect).join(', ')})"
+            end
 
-          [glyph, name, fingerprint, alt_name_string, explanation, metadata_string].compact.join(' ')
+            if extensions.empty?
+              extension_string = nil
+            else
+              extension_string = "**"
+            end
+          end
+
+          [glyph, name, fingerprint, alt_name_string, verify_error, extension_string].compact.join(' ')
+        end
+
+        def format_attrs_and_exts(cert)
+          exts = []
+          exts += cert.custom_extensions if cert.respond_to?(:custom_extensions)
+          exts += cert.custom_attributes if cert.respond_to?(:custom_attributes)
+          exts += cert.extension_requests if cert.respond_to?(:extension_requests)
+
+          exts.map {|e| "#{e['oid']}: #{e['value'].inspect}" }.sort
         end
 
         # Set the method to apply.
