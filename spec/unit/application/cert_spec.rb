@@ -134,13 +134,6 @@ describe Puppet::Application::Cert => true do
       Puppet::SSL::Host.expects(:ca_location=).with(:only)
       @cert_app.setup
     end
-
-    it "should default to machine friendly output" do
-      @cert_app.subcommand = 'list'
-      @cert_app.setup
-
-      expect(@cert_app.options[:format]).to be :machine
-    end
   end
 
   describe "when running" do
