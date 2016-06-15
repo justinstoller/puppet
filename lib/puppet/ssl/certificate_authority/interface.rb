@@ -288,7 +288,7 @@ module Puppet
               STDOUT.print "Sign Certificate Request? [y/N] "
 
               if !options[:yes]
-                input = STDIN.gets
+                input = STDIN.gets.chomp
                 raise ArgumentError, "NOT Signing Certificate Request" unless VALID_CONFIRMATION_VALUES.include?(input)
               else
                 puts "Assuming YES from `-y' or `--assume-yes' flag"
