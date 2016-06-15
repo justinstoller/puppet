@@ -79,19 +79,19 @@ class Puppet::Application::Cert < Puppet::Application
     set_log_level
   end
 
-  option("--human-readable", "-h") do
+  option("--human-readable", "-h") do |arg|
     options[:format] = :human
   end
 
-  option("--machine-readable", "-m") do
+  option("--machine-readable", "-m") do |arg|
     options[:format] = :machine
   end
 
-  option("--interactive", "-i") do
+  option("--interactive", "-i") do |arg|
     options[:interactive] = true
   end
 
-  option("--assume-yes", "-y") do
+  option("--assume-yes", "-y") do |arg|
     options[:yes] = true
   end
 

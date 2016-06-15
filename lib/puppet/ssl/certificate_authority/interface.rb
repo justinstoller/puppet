@@ -279,7 +279,9 @@ module Puppet
             # problematic csr as early as possible for usability concerns.
             ca.check_internal_signing_policies(host, cert, options[:allow_dns_alt_names])
 
-            host_string = format_host(ca, host, :request, cert, host.inspect.length, options[:format])
+            name_width = host.inspect.length
+            info = {:type => :request, :cert => cert}
+            host_string = format_host(host, info, name_width, options[:format])
             puts "Signing Certificate Request for:\n#{host_string}"
 
             if options[:interactive]
