@@ -98,7 +98,7 @@ module Puppet
             exts += cert.custom_attributes if cert.respond_to?(:custom_attributes)
             exts += cert.extension_requests if cert.respond_to?(:extension_requests)
             exts.map! {|e| {:name => e['oid'], :value => e['value'] } }
-            exts.merge!({:alt_names => cert.subject_alt_names - [host]})
+            exts << {:alt_names => cert.subject_alt_names - [host]}
 
             certs[type][host] = {
               :cert         => cert,
@@ -126,7 +126,11 @@ module Puppet
           if not options[:render_as]
             puts output
           elsif options[:render_as] == :json
-            puts certs.values.to_json
+            puts certs.values.
+              reject{|c| c.empty? }.
+              map {|k,v|
+                {:name => k, :fingerprint => v[:fingerprint], :status => v[:type], :verify_error => v[:verify_error], :extensions => v[:extensions]}
+              }.to_json
           elsif options[:render_as] == :csv
             puts "status,certname,fingerprint,error,extensions"
             puts certs.map do |certname, info|
