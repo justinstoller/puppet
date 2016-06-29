@@ -93,10 +93,19 @@ module Puppet
               cert = Puppet::SSL::CertificateRequest.indirection.find(host)
             end
 
+            exts = []
+            exts += cert.custom_extensions if cert.respond_to?(:custom_extensions)
+            exts += cert.custom_attributes if cert.respond_to?(:custom_attributes)
+            exts += cert.extension_requests if cert.respond_to?(:extension_requests)
+            exts.map! {|e| {:name => e['oid'], :value => e['value'] } }
+            exts.merge!({:alt_names => cert.subject_alt_names - [host]})
+
             certs[type][host] = {
               :cert         => cert,
+              :fingerprint  => cert.digest(@digest).to_s,
               :type         => type,
               :verify_error => verify_error,
+              :extensions   => exts
             }
           end
 
@@ -114,7 +123,19 @@ module Puppet
             end
           end.flatten.compact.sort.join("\n")
 
-          puts output
+          if not options[:render_as]
+            puts output
+          elsif options[:render_as] == :json
+            puts certs.values.to_json
+          elsif options[:render_as] == :csv
+            puts "status,certname,fingerprint,error,extensions"
+            puts certs.map do |certname, info|
+              "#{info[:type]},#{certname},#{info[:fingerprint]},#{info[:verify_error]}," +
+              info[:extensions].map {|e| e.is_a? String ? e : e.join(';') }
+            end
+          elsif options[:render_as] == :yaml
+            puts certs.values.to_yaml
+          end
         end
 
         def format_host(host, info, width, format)

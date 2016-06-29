@@ -87,6 +87,10 @@ class Puppet::Application::Cert < Puppet::Application
     options[:format] = :machine
   end
 
+  option("--render-as FORMAT") do |arg|
+    options[:render_as] = arg.to_sym
+  end
+
   option("--interactive", "-i") do |arg|
     options[:interactive] = true
   end
