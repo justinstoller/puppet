@@ -128,8 +128,12 @@ module Puppet
           elsif options[:render_as] == :json
             puts certs.values.
               reject{|c| c.empty? }.
-              map {|k,v|
-                {:name => k, :fingerprint => v[:fingerprint], :status => v[:type], :verify_error => v[:verify_error], :extensions => v[:extensions]}
+              map {|c|
+                {:name => c.keys.first,
+                  :fingerprint => c.values[:fingerprint],
+                  :status => c.values[:type],
+                  :verify_error => c.values[:verify_error],
+                  :extensions => c.values[:extensions]}
               }.to_json
           elsif options[:render_as] == :csv
             puts "status,certname,fingerprint,error,extensions"
