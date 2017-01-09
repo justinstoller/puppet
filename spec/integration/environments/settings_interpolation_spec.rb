@@ -66,6 +66,17 @@ describe "interpolating $environment" do
 
     it_behaves_like "a setting that does not interpolate $environment"
 
+    it "logs a warning if it contains the value of $codedir" do
+      set_puppet_conf(confdir, <<-EOF)
+        codedir=$confdir/code
+        basemodulepath=#{confdir}/code/modules
+      EOF
+
+      Puppet.initialize_settings(cmdline_args)
+      puts @logs
+      expect(@logs.map(&:to_s).grep(/Setting 'basemodulepath' to contain the literal path of \$codedir is deprecated/).count).to eq(1)
+    end
+
     it "logs a single warning for multiple instaces of $environment in the setting" do
       set_puppet_conf(confdir, <<-EOF)
         environmentpath=$confdir/environments
@@ -93,18 +104,31 @@ describe "interpolating $environment" do
     it_behaves_like "a setting that does not interpolate $environment"
   end
 
-  it "does not interpolate $environment and logs a warning when interpolating environmentpath" do
-    setting = 'environmentpath'
-    value = "$confdir/environments/$environment"
-    expected = "#{confdir}/environments/$environment"
+  describe "environmentpath" do
+    it "logs a warning if it contains the value of $codedir" do
+      set_puppet_conf(confdir, <<-EOF)
+        codedir=$confdir/code
+        environmentpath=#{confdir}/environments
+      EOF
 
-    set_puppet_conf(confdir, <<-EOF)
-      #{setting}=#{value}
-    EOF
+      Puppet.initialize_settings(cmdline_args)
+      puts @logs
+      expect(@logs.map(&:to_s).grep(/Setting 'environmentpath' to contain the literal path of \$codedir is deprecated/).count).to eq(1)
+    end
 
-    Puppet.initialize_settings(cmdline_args)
-    expect(Puppet[setting.intern]).to eq(expected)
-    expect(@logs).to have_matching_log(/cannot interpolate \$environment within '#{setting}'/)
+    it "does not interpolate $environment and logs a warning when interpolating environmentpath" do
+      setting = 'environmentpath'
+      value = "$confdir/environments/$environment"
+      expected = "#{confdir}/environments/$environment"
+
+      set_puppet_conf(confdir, <<-EOF)
+        #{setting}=#{value}
+      EOF
+
+      Puppet.initialize_settings(cmdline_args)
+      expect(Puppet[setting.intern]).to eq(expected)
+      expect(@logs).to have_matching_log(/cannot interpolate \$environment within '#{setting}'/)
+    end
   end
 end
 end

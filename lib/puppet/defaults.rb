@@ -308,9 +308,24 @@ module Puppet
         is ':', and the Windows path separator is ';'.)
 
         This setting must have a value set to enable **directory environments.** The
-        recommended value is `$codedir/environments`. For more details, see
+        recommended value is `$codedir/environments`. If set to a different value
+        within `$codedir` the variable `$codedir` must be used rather than hardcoding
+        the filepath. For more details, see
         <https://docs.puppet.com/puppet/latest/reference/environments.html>",
-      :type    => :path,
+      :type      => :path,
+      :call_hook => :on_initialize_and_write,
+      :hook      => proc { |_|
+        val = Puppet.settings.value(:environmentpath, nil, no_interpolation=true)
+        codedir = Puppet.settings[:codedir]
+        # We do this elsewhere but I think it is always going to be a String!?!?
+        if codedir.is_a? String
+          codedir = codedir.end_with?(File::SEPARATOR) ? codedir.chop : codedir
+          if val.include?(codedir)
+            should_envpath = val.gsub(codedir, '$codedir')
+            Puppet.deprecation_warning("Setting 'environmentpath' to contain the literal path of $codedir is deprecated. Use the variable '$codedir' instead. eg.  #{should_envpath} rather than #{val}")
+          end
+        end
+      },
     },
     :always_cache_features => {
       :type     => :boolean,
@@ -1236,8 +1251,23 @@ EOT
 
         These are the modules that will be used by _all_ environments. Note that
         the `modules` directory of the active environment will have priority over
-        any global directories. For more info, see
+        any global directories. If set to a different value within `$codedir` the
+        variable `$codedir` must be used rather than hardcoding the filepath.
+        For more info, see
         <https://docs.puppet.com/puppet/latest/reference/environments.html>",
+      :call_hook => :on_initialize_and_write,
+      :hook      => proc { |_|
+        val = Puppet.settings.value(:basemodulepath, nil, no_interpolation=true)
+        codedir = Puppet.settings[:codedir]
+        # We do this elsewhere but I think it is always going to be a String!?!?
+        if codedir.is_a? String
+          codedir = codedir.end_with?(File::SEPARATOR) ? codedir.chop : codedir
+          if val.include?(codedir)
+            should_bmpath = val.gsub(codedir, '$codedir')
+            Puppet.deprecation_warning("Setting 'basemodulepath' to contain the literal path of $codedir is deprecated. Use the variable '$codedir' instead. eg.  #{should_bmpath} rather than #{val}")
+          end
+        end
+      },
     },
     :ssl_client_header => {
       :default    => "HTTP_X_CLIENT_DN",
