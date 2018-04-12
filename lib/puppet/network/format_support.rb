@@ -97,7 +97,14 @@ module Puppet::Network::FormatSupport
   end
 
   def to_json(*args)
-    Puppet::Util::Json.dump(to_data_hash, *args)
+    # Some JSON serializers (JrJackson, specifically) will coerce strings to
+    # UTF-8, replacing invalid characters rather than raising, which is the
+    # default behavior of Ruby's built in JSON parser. Puppet depends on this
+    # raise behavior to determine suitability of JSON as a network format and
+    # will not properly downgrade the connection to PSON when binary data is
+    # in the catalog unless this raises. to preserve the behavior we
+    # intentionally use the much slower built in JSON serialization here.
+    to_data_hash.to_json(*args)
   end
 
   def render(format = nil)
