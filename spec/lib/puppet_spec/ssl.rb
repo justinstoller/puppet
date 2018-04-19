@@ -212,9 +212,7 @@ module PuppetSpec
     end
 
     def self.bundle(*items)
-      items.reduce('') do |bundle, item|
-        bundle + item.to_pem + "\n"
-      end
+      items.map(&:to_pem).join("\n")
     end
   end
 end
