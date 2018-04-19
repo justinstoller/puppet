@@ -693,18 +693,21 @@ describe Puppet::SSL::Host do
     end
 
     it "should accept a purpose" do
-      @store.expects(:purpose=).with "my special purpose"
-      @host.ssl_store("my special purpose")
-    end
+      store = mock 'store'
+      store.stub_everything
+      OpenSSL::X509::Store.expects(:new).returns store
+      store.expects(:purpose=).with(OpenSSL::X509::PURPOSE_SSL_SERVER)
 
-    it "should default to OpenSSL::X509::PURPOSE_ANY as the purpose" do
-      @store.expects(:purpose=).with OpenSSL::X509::PURPOSE_ANY
-      @host.ssl_store
+      @host.ssl_store(OpenSSL::X509::PURPOSE_SSL_SERVER)
     end
 
     it "should add the local CA cert file" do
       Puppet[:localcacert] = "/ca/cert/file"
-      @store.expects(:add_file).with Puppet[:localcacert]
+      store = mock 'store'
+      store.stub_everything
+      OpenSSL::X509::Store.expects(:new).returns store
+      store.expects(:add_file).with Puppet[:localcacert]
+
       @host.ssl_store
     end
 
