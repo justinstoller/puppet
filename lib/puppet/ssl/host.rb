@@ -380,21 +380,29 @@ ERROR_STRING
     # a lookup in the middle of setting our ssl connection.
     store.add_file(Puppet[:localcacert])
 
-    # If we're doing revocation and there's a CRL, add it to our store.
-    if Puppet.lookup(:certificate_revocation)
-      if Puppet::FileSystem.exist?(Puppet.settings[:hostcrl])
+    crl_setting = Puppet.lookup(:certificate_revocation)
+    if ca?
+      crl_path = Puppet.settings[:cacrl]
+    else
+      crl_path = Puppet.settings[:hostcrl]
+    end
+
+    if crl_setting
+      if Puppet::FileSystem.exist?(crl_path)
+        crls = Puppet::FileSystem.read(crl_path)
+        crls = crls.split(CRL_DELIMITER).map do |crl|
+          crl += CRL_DELIMITER
+          crl = OpenSSL::X509::CRL.new(crl)
+        end
+
         flags = OpenSSL::X509::V_FLAG_CRL_CHECK
-        if Puppet.lookup(:certificate_revocation) == :chain
+        if crl_setting == :chain || crl_setting == true
           flags |= OpenSSL::X509::V_FLAG_CRL_CHECK_ALL
         end
 
         store.flags = flags
-        crls = Puppet::FileSystem.read(Puppet.settings[:hostcrl])
-        crls.split(CRL_DELIMITER).each do |crl|
-          crl += CRL_DELIMITER
-          crl = OpenSSL::X509::CRL.new(crl)
-          store.add_crl(crl)
-        end
+        crls.each {|crl| store.add_crl(crl) }
+
       else
         Puppet.debug _("Certificate revocation checking is enabled but a CRL cannot be found; CRL checking will not be performed.")
       end
