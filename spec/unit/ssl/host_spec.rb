@@ -711,12 +711,11 @@ describe Puppet::SSL::Host do
       before do
         pki = PuppetSpec::SSL.create_chained_pki
 
-        @revoked_cert1   = pki[:revoked_root_node_cert]
-        @revoked_cert2   = pki[:revoked_int_node_cert]
-        @revoked_cert3   = pki[:revoked_leaf_node_cert]
-        @unrevoked_cert1 = pki[:unrevoked_root_node_cert]
-        @unrevoked_cert2 = pki[:unrevoked_int_node_cert]
-        @unrevoked_cert3 = pki[:unrevoked_leaf_node_cert]
+        @revoked_cert_from_self_signed_root          = pki[:revoked_root_node_cert]
+        @revoked_cert_from_ca_with_untrusted_chain   = pki[:revoked_leaf_node_cert]
+        @unrevoked_cert_from_self_signed_root        = pki[:unrevoked_root_node_cert]
+        @unrevoked_cert_from_revoked_ca              = pki[:unrevoked_int_node_cert]
+        @unrevoked_cert_from_ca_with_untrusted_chain = pki[:unrevoked_leaf_node_cert]
 
         localcacert = Puppet.settings[:localcacert]
         hostcrl     = Puppet.settings[:hostcrl]
@@ -737,13 +736,16 @@ describe Puppet::SSL::Host do
           end
 
           it "should verify unrevoked certs" do
-            [@unrevoked_cert1, @unrevoked_cert2, @unrevoked_cert3].each do |cert|
-              expect(@host.ssl_store.verify(cert)).to be true
-            end
+            expect(
+              @host.ssl_store.verify(@unrevoked_cert_from_self_signed_root)
+            ).to be true
           end
 
           it "should not verify revoked certs" do
-            [@revoked_cert1, @revoked_cert2, @revoked_cert3].each do |cert|
+            [@revoked_cert_from_self_signed_root,
+             @revoked_cert_from_ca_with_untrusted_chain,
+             @unrevoked_cert_from_revoked_ca,
+             @unrevoked_cert_from_ca_with_untrusted_chain].each do |cert|
               expect(@host.ssl_store.verify(cert)).to be false
             end
           end
@@ -755,20 +757,19 @@ describe Puppet::SSL::Host do
           Puppet[:certificate_revocation] = 'leaf'
         end
 
-        it "should verify unrevoked certs" do
-          [@unrevoked_cert1, @unrevoked_cert2, @unrevoked_cert3].each do |cert|
+        it "should verify unrevoked certs regardless of signing CA's revocation status" do
+          [@unrevoked_cert_from_self_signed_root,
+           @unrevoked_cert_from_revoked_ca,
+           @unrevoked_cert_from_ca_with_untrusted_chain].each do |cert|
             expect(@host.ssl_store.verify(cert)).to be true
           end
         end
 
-        it "should allow certs revoked by CAs other than the leaf" do
-          [@revoked_cert1, @revoked_cert2].each do |cert|
-            expect(@host.ssl_store.verify(cert)).to be true
+        it "should not verify certs revoked by their signing CA" do
+          [@revoked_cert_from_self_signed_root,
+           @revoked_cert_from_ca_with_untrusted_chain].each do |cert|
+            expect(@host.ssl_store.verify(cert)).to be false
           end
-        end
-
-        it "should not verify certs revoked by the leaf CA" do
-          expect(@host.ssl_store.verify(@revoked_cert3)).to be false
         end
       end
 
@@ -778,8 +779,11 @@ describe Puppet::SSL::Host do
         end
 
         it "should verify valid certs regardless of revocation status" do
-          [@unrevoked_cert1, @unrevoked_cert2, @unrevoked_cert3,
-           @revoked_cert1, @revoked_cert2, @revoked_cert3].each do |cert|
+          [@revoked_cert_from_self_signed_root,
+           @revoked_cert_from_ca_with_untrusted_chain,
+           @unrevoked_cert_from_self_signed_root,
+           @unrevoked_cert_from_revoked_ca,
+           @unrevoked_cert_from_ca_with_untrusted_chain].each do |cert|
             expect(@host.ssl_store.verify(cert)).to be true
           end
         end
