@@ -729,10 +729,15 @@ describe Puppet::SSL::Host do
         Puppet::FileSystem.unlink(Puppet.settings[:hostcrl])
       end
 
-      [true, 'chain'].each do |crl_setting|
+      [true, :chain].each do |crl_setting|
         describe "and 'certificate_revocation' is #{crl_setting}" do
           before do
-            Puppet[:certificate_revocation] = crl_setting
+            Puppet.push_context({certificate_revocation: crl_setting})
+            @host = Puppet::SSL::Host.new(crl_setting.to_s)
+          end
+
+          after do
+            Puppet.pop_context
           end
 
           it "should verify unrevoked certs" do
@@ -754,7 +759,12 @@ describe Puppet::SSL::Host do
 
       describe "and 'certificate_revocation' is leaf" do
         before do
-          Puppet[:certificate_revocation] = 'leaf'
+          Puppet.push_context({certificate_revocation: :leaf})
+          @host = Puppet::SSL::Host.new("leaf")
+        end
+
+        after do
+          Puppet.pop_context
         end
 
         it "should verify unrevoked certs regardless of signing CA's revocation status" do
@@ -775,7 +785,12 @@ describe Puppet::SSL::Host do
 
       describe "and 'certificate_revocation' is false" do
         before do
-          Puppet[:certificate_revocation] = false
+          Puppet.push_context({certificate_revocation: false})
+          @host = Puppet::SSL::Host.new("host")
+        end
+
+        after do
+          Puppet.pop_context
         end
 
         it "should verify valid certs regardless of revocation status" do

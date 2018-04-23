@@ -15,7 +15,6 @@ class Puppet::SSL::Host
   Certificate = Puppet::SSL::Certificate
   CertificateRequest = Puppet::SSL::CertificateRequest
   CertificateRevocationList = Puppet::SSL::CertificateRevocationList
-  CRL_DELIMITER = "-----END X509 CRL-----\n"
 
   extend Puppet::Indirector
   indirects :certificate_status, :terminus_class => :file, :doc => <<DOC
@@ -23,7 +22,7 @@ class Puppet::SSL::Host
     The indirection key is the certificate CN (generally a hostname).
 DOC
 
-  attr_reader :name
+  attr_reader :name, :crl_path, :crl_usage
   attr_accessor :ca
 
   attr_writer :key, :certificate, :certificate_request
@@ -265,6 +264,12 @@ ERROR_STRING
     Puppet::SSL::Base.validate_certname(@name)
     @key = @certificate = @certificate_request = nil
     @ca = (name == self.class.ca_name)
+    @crl_usage = Puppet.lookup(:certificate_revocation)
+    if @ca
+      @crl_path = Puppet.settings[:cacrl]
+    else
+      @crl_path = Puppet.settings[:hostcrl]
+    end
   end
 
   # Extract the public key from the private key.
@@ -372,6 +377,15 @@ ERROR_STRING
 
   private
 
+  def load_crls(path)
+    ending = "-----END X509 CRL-----\n"
+    crls_pems = Puppet::FileSystem.read(path)
+    crls_pems.split(ending).map do |crl|
+      crl += ending
+      OpenSSL::X509::CRL.new(crl)
+    end
+  end
+
   def build_ssl_store(purpose)
     store = OpenSSL::X509::Store.new
     store.purpose = purpose
@@ -380,23 +394,12 @@ ERROR_STRING
     # a lookup in the middle of setting our ssl connection.
     store.add_file(Puppet.settings[:localcacert])
 
-    crl_setting = Puppet.lookup(:certificate_revocation)
-    if ca?
-      crl_path = Puppet.settings[:cacrl]
-    else
-      crl_path = Puppet.settings[:hostcrl]
-    end
-
-    if crl_setting
+    if crl_usage
       if Puppet::FileSystem.exist?(crl_path)
-        crls = Puppet::FileSystem.read(crl_path)
-        crls = crls.split(CRL_DELIMITER).map do |crl|
-          crl += CRL_DELIMITER
-          crl = OpenSSL::X509::CRL.new(crl)
-        end
+        crls = load_crls(crl_path)
 
         flags = OpenSSL::X509::V_FLAG_CRL_CHECK
-        if crl_setting == :chain || crl_setting == true
+        if crl_usage == :chain || crl_usage == true
           flags |= OpenSSL::X509::V_FLAG_CRL_CHECK_ALL
         end
 
