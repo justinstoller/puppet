@@ -378,7 +378,7 @@ ERROR_STRING
 
     # Use the file path here, because we don't want to cause
     # a lookup in the middle of setting our ssl connection.
-    store.add_file(Puppet[:localcacert])
+    store.add_file(Puppet.settings[:localcacert])
 
     crl_setting = Puppet.lookup(:certificate_revocation)
     if ca?
