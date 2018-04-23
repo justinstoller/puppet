@@ -390,6 +390,10 @@ ERROR_STRING
     end
   end
 
+  # @param path [String] Path to CRL Chain
+  # @return [Array<OpenSSL::X509::CRL>] CRLs from chain
+  # @raise [Errno::ENOENT] if file does not exist
+  # @raise [OpenSSL::X509::CRLError] if the CRL chain is malformed
   def load_crls(path)
     ending = "-----END X509 CRL-----\n"
     crls_pems = Puppet::FileSystem.read(path)
@@ -399,6 +403,12 @@ ERROR_STRING
     end
   end
 
+  # @param [OpenSSL::X509::PURPOSE_*] constant defining the kinds of certs
+  #   this store can verify
+  # @return [OpenSSL::X509::Store]
+  # @raise [OpenSSL::X509::StoreError] if localcacert is malformed or non-existant
+  # @raise [OpenSSL::X509::CRLError] if the CRL chain is malformed
+  # @raise [Errno::ENOENT] if the CRL does not exist on disk but crl_usage is truthy
   def build_ssl_store(purpose)
     store = OpenSSL::X509::Store.new
     store.purpose = purpose
