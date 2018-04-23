@@ -208,6 +208,9 @@ module Puppet
         Puppet::Network::HTTP::NoCachePool.new
       },
       :ssl_host => proc { Puppet::SSL::Host.localhost },
+      # We do this so we can use Context's ability to have code executed
+      # within an override block because when first downloading the CRL
+      # we want to disable CRL checking, if enabled.
       :certificate_revocation => proc { Puppet[:certificate_revocation] },
       :plugins => proc { Puppet::Plugins::Configuration.load_plugins }
     }
