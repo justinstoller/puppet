@@ -393,13 +393,19 @@ ERROR_STRING
   # @param path [String] Path to CRL Chain
   # @return [Array<OpenSSL::X509::CRL>] CRLs from chain
   # @raise [Errno::ENOENT] if file does not exist
-  # @raise [OpenSSL::X509::CRLError] if the CRL chain is malformed
+  # @raise [Puppet::Error<OpenSSL::X509::CRLError>] if the CRL chain is malformed
   def load_crls(path)
     ending = "-----END X509 CRL-----\n"
     crls_pems = Puppet::FileSystem.read(path)
     crls_pems.split(ending).map do |crl|
-      crl += ending
-      OpenSSL::X509::CRL.new(crl)
+      begin
+        crl += ending
+        OpenSSL::X509::CRL.new(crl)
+      rescue OpenSSL::X509::CRLError => e
+        raise Puppet::Error.new(
+          _("Failed attempting to load CRL from #{path}! The CRL below is invalid:\n#{crl}"),
+          e)
+      end
     end
   end
 
@@ -407,7 +413,7 @@ ERROR_STRING
   #   this store can verify
   # @return [OpenSSL::X509::Store]
   # @raise [OpenSSL::X509::StoreError] if localcacert is malformed or non-existant
-  # @raise [OpenSSL::X509::CRLError] if the CRL chain is malformed
+  # @raise [Puppet::Error] if the CRL chain is malformed
   # @raise [Errno::ENOENT] if the CRL does not exist on disk but crl_usage is truthy
   def build_ssl_store(purpose)
     store = OpenSSL::X509::Store.new
