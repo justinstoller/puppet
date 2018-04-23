@@ -281,6 +281,9 @@ ERROR_STRING
   # connections.
   def ssl_store(purpose = OpenSSL::X509::PURPOSE_ANY)
     if @ssl_store.nil?
+      if crl_usage && !Puppet::FileSystem.exist?(crl_path)
+        attempt_to_retrieve_crl!
+      end
       @ssl_store = build_ssl_store(purpose)
     end
     @ssl_store
@@ -376,6 +379,10 @@ ERROR_STRING
   end
 
   private
+
+  def attempt_to_retrieve_crl!
+    CertificateRevocationList.indirection.find(name)
+  end
 
   def load_crls(path)
     ending = "-----END X509 CRL-----\n"
