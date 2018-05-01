@@ -124,55 +124,62 @@ module PuppetSpec
       crl
     end
 
+    def self.create_root_ca(cn)
+      key = create_private_key
+      cert = self_signed_ca(key, "/CN=#{cn}")
+      crl = create_crl_for(cert, key)
+
+      [key, cert, crl]
+    end
+
+    def self.create_intermediate_ca(cn, issuer_key, issuer_cert)
+      key = create_private_key
+      csr = create_csr(key, "/CN=#{cn}")
+      cert = sign(issuer_key, issuer_cert, csr, CA_EXTENSIONS)
+      crl = create_crl_for(cert, key)
+
+      [key, cert, crl]
+    end
+
+    def self.create_signed_node_cert(cn, issuer_key, issuer_cert)
+      key = create_private_key
+      csr = create_csr(key, "/CN=#{cn}")
+      sign(issuer_key, issuer_cert, csr)
+    end
+
+    def self.create_revoked_node_cert(cn, issuer_key, issuer_cert, issuer_crl)
+      key = create_private_key
+      csr = create_csr(key, "/CN=#{cn}")
+      cert = sign(issuer_key, issuer_cert, csr)
+      revoke(cert.serial, issuer_crl, issuer_key)
+
+      cert
+    end
+
+    def self.bundle(*items)
+      items.map(&:to_pem).join("\n")
+    end
+
     # Creates a self-signed root ca, then signs two node certs, revoking one of them.
     # Creates an intermediate CA and one node cert off of it.
     # Creates a leaf CA off of the intermediate CA, then signs two node certs revoking one of them.
     # Revokes the intermediate CA.
     # Returns the ca bundle, crl chain, and all the node certs
     def self.create_chained_pki
-      root_key = create_private_key
-      root_cert = self_signed_ca(root_key, "/CN=root-ca")
-      root_crl = create_crl_for(root_cert, root_key)
+      root_key, root_cert, root_crl = create_root_ca('root-ca')
+      int_key, int_cert, int_crl = create_intermediate_ca('revoked-int-ca', root_key, root_cert)
+      leaf_key, leaf_cert, leaf_crl = create_intermediate_ca('leaf-ca', int_key, int_cert)
 
-      unrevoked_root_node_key = create_private_key
-      unrevoked_root_node_csr = create_csr(unrevoked_root_node_key, "/CN=unrevoked-root-node")
-      unrevoked_root_node_cert = sign(root_key, root_cert, unrevoked_root_node_csr)
+      unrevoked_root_node_cert = create_signed_node_cert('unrevoked-root-node', root_key, root_cert)
+      revoked_root_node_cert = create_revoked_node_cert('revoked-root-node', root_key, root_cert, root_crl)
+      unrevoked_int_node_cert = create_signed_node_cert('unrevoked-int-node', int_key, int_cert)
+      unrevoked_leaf_node_cert = create_signed_node_cert('unrevoked-leaf-node', leaf_key, leaf_cert)
+      revoked_leaf_node_cert = create_revoked_node_cert('revoked-leaf-node', leaf_key, leaf_cert, leaf_crl)
 
-      revoked_root_node_key = create_private_key
-      revoked_root_node_csr = create_csr(revoked_root_node_key, "/CN=revoked-root-node")
-      revoked_root_node_cert = sign(root_key, root_cert, revoked_root_node_csr)
+      revoke(int_cert.serial, root_crl, root_key)
 
-      revoke(revoked_root_node_cert.serial, root_crl, root_key)
-
-      revoked_int_key = create_private_key
-      revoked_int_csr = create_csr(revoked_int_key, "/CN=revoked-int-ca")
-      revoked_int_cert = sign(root_key, root_cert, revoked_int_csr, CA_EXTENSIONS)
-      revoked_int_crl = create_crl_for(revoked_int_cert, revoked_int_key)
-
-      unrevoked_int_node_key = create_private_key
-      unrevoked_int_node_csr = create_csr(unrevoked_int_node_key, "/CN=unrevoked-int-node")
-      unrevoked_int_node_cert = sign(revoked_int_key, revoked_int_cert, unrevoked_int_node_csr)
-
-      leaf_key = create_private_key
-      leaf_csr = create_csr(leaf_key, "/CN=leaf-ca")
-      leaf_cert = sign(revoked_int_key, revoked_int_cert, leaf_csr, CA_EXTENSIONS)
-      leaf_crl = create_crl_for(leaf_cert, leaf_key)
-
-      revoke(revoked_int_cert.serial, root_crl, root_key)
-
-      unrevoked_leaf_node_key = create_private_key
-      unrevoked_leaf_node_csr = create_csr(unrevoked_leaf_node_key, "/CN=unrevoked-leaf-node")
-      unrevoked_leaf_node_cert = sign(leaf_key, leaf_cert, unrevoked_leaf_node_csr)
-
-      revoked_leaf_node_key = create_private_key
-      revoked_leaf_node_csr = create_csr(revoked_leaf_node_key, "/CN=revoked-leaf-node")
-      revoked_leaf_node_cert = sign(leaf_key, leaf_cert, revoked_leaf_node_csr)
-
-      revoke(revoked_leaf_node_cert.serial, leaf_crl, leaf_key)
-
-
-      ca_bundle = bundle(root_cert, revoked_int_cert, leaf_cert)
-      crl_chain = bundle(root_crl, revoked_int_crl, leaf_crl)
+      ca_bundle = bundle(root_cert, int_cert, leaf_cert)
+      crl_chain = bundle(root_crl, int_crl, leaf_crl)
 
       {
         :revoked_root_node_cert => revoked_root_node_cert,
@@ -197,10 +204,6 @@ module PuppetSpec
       ef.subject_certificate = cert if cert
 
       ef
-    end
-
-    def self.bundle(*items)
-      items.map(&:to_pem).join("\n")
     end
   end
 end

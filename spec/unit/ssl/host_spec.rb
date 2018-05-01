@@ -726,21 +726,56 @@ describe Puppet::SSL::Host do
     end
 
     describe "and a CRL is available" do
+      let!(:root_key) { PuppetSpec::SSL.create_private_key }
+      let!(:root_cert) { PuppetSpec::SSL.self_signed_ca(root_key, '/CN=root-ca') }
+      let!(:root_crl) { PuppetSpec::SSL.create_crl_for(root_cert, root_key) }
+      let!(:int_key) { PuppetSpec::SSL.create_private_key }
+      let!(:int_cert) { PuppetSpec::SSL.self_signed_ca(int_key, '/CN=int-ca') }
+      let!(:int_crl) { PuppetSpec::SSL.create_crl_for(int_cert, int_key) }
+      let!(:leaf_key) { PuppetSpec::SSL.create_private_key }
+      let!(:leaf_cert) { PuppetSpec::SSL.self_signed_ca(leaf_key, '/CN=leaf-ca') }
+      let!(:leaf_crl) { PuppetSpec::SSL.create_crl_for(leaf_cert, leaf_key) }
+
+      let!(:revoked_cert_from_self_signed_root) do
+        PuppetSpec::SSL.create_signed_node_cert('revoked-root-node', root_key, root_cert)
+      end
+      let!(:revoked_cert_from_ca_with_untrusted_chain) do
+        PuppetSpec::SSL.create_signed_node_cert('revoked-leaf-node', leaf_key, leaf_cert)
+      end
+      let!(:unrevoked_cert_from_self_signed_root) do
+        PuppetSpec::SSL.create_signed_node_cert('unrevoked-root-node', root_key, root_cert)
+      end
+      let!(:unrevoked_cert_from_revoked_ca) do
+        PuppetSpec::SSL.create_signed_node_cert('unrevoked-int-node', int_key, int_cert)
+      end
+      let!(:unrevoked_cert_from_ca_with_untrusted_chain) do
+        PuppetSpec::SSL.create_signed_node_cert('unrevoked-leaf-node', leaf_key, leaf_cert)
+      end
+
+      let!(:final_leaf_crl) do
+        PuppetSpec::SSL.revoke(revoked_cert_from_ca_with_untrusted_chain.serial, leaf_crl, leaf_key)
+      end
+
+      let!(:root_crl_w_revoked_node) do
+        PuppetSpec::SSL.revoke(revoked_cert_from_self_signed_root.serial, root_crl, root_key)
+      end
+
+      let!(:final_root_crl) do
+        PuppetSpec::SSL.revoke(int_cert.serial, root_crl_w_revoked_node, root_key)
+      end
+      let!(:wtf) do
+        Puppet::Util.replace_file(Puppet.settings[:localcacert], 0644) do |f|
+          f.write PuppetSpec::SSL.bundle(root_cert, int_cert, leaf_cert)
+        end
+      end
+
+      let!(:wtf2) do
+        Puppet::Util.replace_file(Puppet.settings[:hostcrl], 0644) do |f|
+          f.write PuppetSpec::SSL.bundle(final_root_crl, int_crl, final_leaf_crl)
+        end
+      end
+
       before do
-        pki = PuppetSpec::SSL.create_chained_pki
-
-        @revoked_cert_from_self_signed_root          = pki[:revoked_root_node_cert]
-        @revoked_cert_from_ca_with_untrusted_chain   = pki[:revoked_leaf_node_cert]
-        @unrevoked_cert_from_self_signed_root        = pki[:unrevoked_root_node_cert]
-        @unrevoked_cert_from_revoked_ca              = pki[:unrevoked_int_node_cert]
-        @unrevoked_cert_from_ca_with_untrusted_chain = pki[:unrevoked_leaf_node_cert]
-
-        localcacert = Puppet.settings[:localcacert]
-        hostcrl     = Puppet.settings[:hostcrl]
-
-        Puppet::Util.replace_file(localcacert, 0644) {|f| f.write pki[:ca_bundle] }
-        Puppet::Util.replace_file(hostcrl, 0644)     {|f| f.write pki[:crl_chain] }
-
         Puppet::SSL::CertificateRevocationList.indirection.stubs(:find).returns true
       end
 
@@ -758,15 +793,16 @@ describe Puppet::SSL::Host do
 
           it "should verify unrevoked certs" do
             expect(
-              @host.ssl_store.verify(@unrevoked_cert_from_self_signed_root)
+              @host.ssl_store.verify(unrevoked_cert_from_self_signed_root)
             ).to be true
           end
 
           it "should not verify revoked certs" do
-            [@revoked_cert_from_self_signed_root,
-             @revoked_cert_from_ca_with_untrusted_chain,
-             @unrevoked_cert_from_revoked_ca,
-             @unrevoked_cert_from_ca_with_untrusted_chain].each do |cert|
+            [revoked_cert_from_self_signed_root,
+             revoked_cert_from_ca_with_untrusted_chain,
+             unrevoked_cert_from_revoked_ca,
+             unrevoked_cert_from_ca_with_untrusted_chain].each do |cert|
+               puts cert.subject
               expect(@host.ssl_store.verify(cert)).to be false
             end
           end
@@ -780,16 +816,16 @@ describe Puppet::SSL::Host do
         end
 
         it "should verify unrevoked certs regardless of signing CA's revocation status" do
-          [@unrevoked_cert_from_self_signed_root,
-           @unrevoked_cert_from_revoked_ca,
-           @unrevoked_cert_from_ca_with_untrusted_chain].each do |cert|
+          [unrevoked_cert_from_self_signed_root,
+           unrevoked_cert_from_revoked_ca,
+           unrevoked_cert_from_ca_with_untrusted_chain].each do |cert|
             expect(@host.ssl_store.verify(cert)).to be true
           end
         end
 
         it "should not verify certs revoked by their signing CA" do
-          [@revoked_cert_from_self_signed_root,
-           @revoked_cert_from_ca_with_untrusted_chain].each do |cert|
+          [revoked_cert_from_self_signed_root,
+           revoked_cert_from_ca_with_untrusted_chain].each do |cert|
             expect(@host.ssl_store.verify(cert)).to be false
           end
         end
@@ -802,11 +838,11 @@ describe Puppet::SSL::Host do
         end
 
         it "should verify valid certs regardless of revocation status" do
-          [@revoked_cert_from_self_signed_root,
-           @revoked_cert_from_ca_with_untrusted_chain,
-           @unrevoked_cert_from_self_signed_root,
-           @unrevoked_cert_from_revoked_ca,
-           @unrevoked_cert_from_ca_with_untrusted_chain].each do |cert|
+          [revoked_cert_from_self_signed_root,
+           revoked_cert_from_ca_with_untrusted_chain,
+           unrevoked_cert_from_self_signed_root,
+           unrevoked_cert_from_revoked_ca,
+           unrevoked_cert_from_ca_with_untrusted_chain].each do |cert|
             expect(@host.ssl_store.verify(cert)).to be true
           end
         end
