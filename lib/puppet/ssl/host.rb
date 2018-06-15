@@ -8,6 +8,10 @@ require 'puppet/ssl/certificate_request_attributes'
 require 'puppet/rest/errors'
 require 'puppet/rest/routes'
 require 'puppet/rest/ssl_context'
+begin
+  require 'puppet/rest/client'
+rescue LoadError
+end
 
 # The class that manages all aspects of our SSL certificates --
 # private keys, public keys, requests, etc.
@@ -192,9 +196,6 @@ DOC
   end
 
   def http_client(ssl_context)
-    # This can't be required top-level because Puppetserver uses the Host class too,
-    # and we don't ship the gem in that context.
-    require 'puppet/rest/client'
     Puppet::Rest::Client.new(ssl_context: ssl_context)
   end
 
