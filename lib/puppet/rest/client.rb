@@ -27,6 +27,9 @@ module Puppet::Rest
       @client.receive_timeout = receive_timeout
       @client.transparent_gzip_decompression = true
 
+      @ca_path = Puppet[:ssl_client_ca_auth] || Puppet[:localcacert]
+      @verifier = Puppet::SSL::Validator::DefaultValidator.new(@ca_path)
+
       if Puppet[:http_debug]
         @client.debug_dev = $stderr
       end
@@ -49,6 +52,8 @@ module Puppet::Rest
         end
       rescue HTTPClient::BadResponseError => e
         raise Puppet::Rest::ResponseError.new(e.message, Puppet::Rest::Response.new(e.res))
+      rescue OpenSSL::SSLError => e
+        Puppet::Network::HTTP::Connection.handle_ssl_error!(e, @verifier, @dns_resolver.server)
       end
     end
 
@@ -67,7 +72,7 @@ module Puppet::Rest
 
     def configure_verify_mode(ssl_context)
       ca_path = Puppet[:ssl_client_ca_auth] || Puppet[:localcacert]
-      @client.ssl_config.verify_callback = Puppet::SSL::Validator::DefaultValidator.new(ca_path)
+      @client.ssl_config.verify_callback = @verifier
       @client.ssl_config.cert_store = ssl_context.cert_store
       @client.ssl_config.verify_mode = ssl_context.verify_mode
     end
