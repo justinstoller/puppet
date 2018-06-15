@@ -51,7 +51,7 @@ module Puppet::Rest
           block.call(chunk)
         end
       rescue HTTPClient::BadResponseError => e
-        raise Puppet::Rest::ResponseError.new(e.message, Puppet::Rest::Response.new(e.res))
+        raise Puppet::Rest::Response.new(e.res).to_exception
       rescue OpenSSL::SSLError => e
         Puppet::Network::HTTP::Connection.handle_ssl_error!(e, @verifier, @dns_resolver.server)
       end
