@@ -61,11 +61,13 @@ describe Puppet::Rest::Client do
       end
 
       it 'throws an exception when the response to the GET is not OK' do
-        fake_response = mock('resp', :status => HTTP::Status::BAD_REQUEST)
+        fake_response = mock('resp')
+        fake_response.expects(:status).returns(HTTP::Status::BAD_REQUEST).at_least_once
+        fake_response.expects(:body).returns('foo').at_least_once
         http.expects(:get_content).with(url, query: nil, header: nil)
             .raises(HTTPClient::BadResponseError.new('failed request', fake_response))
         expect { client.get(url) }.to raise_error do |error|
-          expect(error.message).to eq('failed request')
+          expect(error.message).to include('foo')
           expect(error.response).to be_a(Puppet::Rest::Response)
           expect(error.response.status_code).to eq(400)
         end
