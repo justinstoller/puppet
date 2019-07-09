@@ -1,3 +1,4 @@
+require 'facter'
 require 'puppet/face'
 require 'puppet/configurer/plugin_handler'
 

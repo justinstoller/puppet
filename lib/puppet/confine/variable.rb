@@ -1,4 +1,5 @@
 require 'puppet/confine'
+require 'facter'
 
 # Require a specific value for a variable, either a Puppet setting
 # or a Facter value.  This class is a bit weird because the name

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 require 'puppet'
+require 'facter'
 require 'puppet/util/log'
 require 'puppet/util/metric'
 require 'puppet/property'

@@ -1,6 +1,7 @@
 # Puppet as a Library "PAL"
 
 # Yes, this requires all of puppet for now because 'settings' and many other things...
+require 'facter'
 require 'puppet'
 require 'puppet/parser/script_compiler'
 require 'puppet/parser/catalog_compiler'

@@ -1,3 +1,4 @@
+require 'facter'
 require 'puppet/util/platform'
 
 module Puppet

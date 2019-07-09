@@ -1,3 +1,4 @@
+require 'facter'
 require 'puppet/node/facts'
 require 'puppet/indirector/code'
 

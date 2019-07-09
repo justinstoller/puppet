@@ -1,4 +1,5 @@
 require 'puppet'
+require 'facter'
 
 # A module for building AtFork handlers. These handlers are objects providing
 # pre/post fork callbacks modeled after those registered by the `pthread_atfork`

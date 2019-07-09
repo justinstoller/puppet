@@ -73,10 +73,14 @@ class Puppet::Settings
   end
 
   def self.hostname_fact()
+    require 'facter'
+
     Facter.value :hostname
   end
 
   def self.domain_fact()
+    require 'facter'
+
     Facter.value :domain
   end
 

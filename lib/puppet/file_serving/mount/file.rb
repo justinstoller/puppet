@@ -1,4 +1,5 @@
 require 'puppet/file_serving/mount'
+require 'facter'
 
 class Puppet::FileServing::Mount::File < Puppet::FileServing::Mount
   def self.localmap

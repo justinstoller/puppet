@@ -1,3 +1,5 @@
+require 'facter'
+
 module Puppet::ModuleTool
   module Applications
     class Uninstaller < Application

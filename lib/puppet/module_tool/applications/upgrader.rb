@@ -1,5 +1,6 @@
 require 'pathname'
 
+require 'facter'
 require 'puppet/forge'
 require 'puppet/module_tool'
 require 'puppet/module_tool/shared_behaviors'
