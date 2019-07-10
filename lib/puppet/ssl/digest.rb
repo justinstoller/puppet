@@ -1,20 +1,26 @@
-class Puppet::SSL::Digest
-  attr_reader :digest
+require 'openssl'
 
-  def initialize(algorithm, content)
-    algorithm ||= 'SHA256'
-    @digest = OpenSSL::Digest.new(algorithm, content)
-  end
+module Puppet
+  module SSL
+    class Digest
+      attr_reader :digest
 
-  def to_s
-    "(#{name}) #{to_hex}"
-  end
+      def initialize(algorithm, content)
+        algorithm ||= 'SHA256'
+        @digest = OpenSSL::Digest.new(algorithm, content)
+      end
 
-  def to_hex
-    @digest.hexdigest.scan(/../).join(':').upcase
-  end
+      def to_s
+        "(#{name}) #{to_hex}"
+      end
 
-  def name
-    @digest.name.upcase
+      def to_hex
+        @digest.hexdigest.scan(/../).join(':').upcase
+      end
+
+      def name
+        @digest.name.upcase
+      end
+    end
   end
 end

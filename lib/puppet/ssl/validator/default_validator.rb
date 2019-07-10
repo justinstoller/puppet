@@ -1,5 +1,8 @@
 require 'openssl'
-require 'puppet/ssl'
+require 'puppet'
+require 'puppet/file_system'
+require 'puppet/ssl/error'
+require 'puppet/ssl/validator'
 
 # Perform peer certificate verification against the known CA.
 # If there is no CA information known, then no verification is performed

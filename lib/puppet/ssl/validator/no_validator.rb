@@ -1,5 +1,5 @@
 require 'openssl'
-require 'puppet/ssl'
+require 'puppet/ssl/validator'
 
 # Performs no SSL verification
 #
