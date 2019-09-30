@@ -242,14 +242,16 @@ describe 'loaders' do
     end
 
     it 'all other modules are visible when tasks are enabled' do
-      Puppet[:tasks] = true
+      Puppet.override({tasks: true,
+                       current_lexer: Puppet::Pops::Parser::TaskLexer.new}) do
 
-      env = environment_for(File.join(dependent_modules_with_metadata, 'modules'))
-      loaders = Puppet::Pops::Loaders.new(env)
+        env = environment_for(File.join(dependent_modules_with_metadata, 'modules'))
+        loaders = Puppet::Pops::Loaders.new(env)
 
-      moduleb_loader = loaders.private_loader_for_module('user')
-      function = moduleb_loader.load_typed(typed_name(:function, 'user::caller')).value
-      expect(function.call({})).to eql("usee::callee() was told 'passed value' + I am user::caller()")
+        moduleb_loader = loaders.private_loader_for_module('user')
+        function = moduleb_loader.load_typed(typed_name(:function, 'user::caller')).value
+        expect(function.call({})).to eql("usee::callee() was told 'passed value' + I am user::caller()")
+      end
     end
 
     [ 'outside a function', 'a puppet function declared under functions', 'a puppet function declared in init.pp', 'a ruby function'].each_with_index do |from, from_idx|

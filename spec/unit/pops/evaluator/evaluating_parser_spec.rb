@@ -1565,8 +1565,13 @@ describe 'Puppet::Pops::Evaluator::EvaluatorImpl' do
   end
 
   context 'with --tasks' do
-    before(:each) do
-      Puppet[:tasks] = true
+    around(:each) do |example|
+      Puppet.override({
+        tasks: true,
+        current_lexer: Puppet::Pops::Parser::TaskLexer.new
+      }) do
+        example.run
+      end
     end
 
     context 'when evaluating apply' do

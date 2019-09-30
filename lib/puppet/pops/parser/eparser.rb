@@ -2549,10 +2549,6 @@ module_eval(<<'.,.,', 'egrammar.ra', 513)
           definition = Factory.DEFINITION(classname(val[1][:value]), val[2], val[4])
       loc(definition, val[0], val[5])
       result = add_definition(definition)
-      # New lexer does not keep track of this, this is done in validation
-      if @lexer.respond_to?(:'indefine=')
-        @lexer.indefine = false
-      end
     
     result
   end

@@ -7,7 +7,7 @@ class ValidatorFactory_4_0 < Factory
 
   # Produces the checker to use
   def checker diagnostic_producer
-    if Puppet[:tasks]
+    if Puppet.lookup(:tasks)
       require_relative 'tasks_checker'
       TasksChecker.new(diagnostic_producer)
     else

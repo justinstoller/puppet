@@ -78,11 +78,12 @@ describe "the template function" do
   end
 
   it 'is not available when --tasks is on' do
-    Puppet[:tasks] = true
-    expect {
-      eval_template("<%= lookupvar('myvar') %>")
-    }.to raise_error(Puppet::ParseError, /is only available when compiling a catalog/)
-
+    Puppet.override({tasks: true,
+                     current_lexer: Puppet::Pops::Parser::TaskLexer.new}) do
+      expect {
+        eval_template("<%= lookupvar('myvar') %>")
+      }.to raise_error(Puppet::ParseError, /is only available when compiling a catalog/)
+    end
   end
 
   def eval_template(content)

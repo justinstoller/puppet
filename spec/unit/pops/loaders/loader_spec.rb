@@ -11,8 +11,13 @@ describe 'The Loader' do
   include PuppetSpec::Compiler
   include PuppetSpec::Files
 
-  before(:each) do
-    Puppet[:tasks] = true
+  around(:each) do |example|
+    Puppet.override({
+      tasks: true,
+      current_lexer: Puppet::Pops::Parser::TaskLexer.new
+    }) do
+      example.run
+    end
   end
 
   let(:testing_env) do
@@ -53,13 +58,23 @@ describe 'The Loader' do
   let(:tasks_feature) { false }
 
   before(:each) do
-    Puppet[:tasks] = tasks_feature
+    if tasks_feature
+      Puppet.push_context({
+        tasks: true,
+        current_lexer: Puppet::Pops::Parser::TaskLexer.new
+      })
+    else
+      Puppet.push_context({
+        tasks: false,
+        current_lexer: Puppet::Pops::Parser::CatalogLexer.new
+      })
+    end
     loaders = Loaders.new(env)
     Puppet.push_context(:loaders => loaders)
     loaders.pre_load
   end
 
-  after(:each) { Puppet.pop_context }
+  after(:each) { Puppet.pop_context; Puppet.pop_context }
 
   context 'when doing discovery' do
     context 'of things' do

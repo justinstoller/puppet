@@ -12,10 +12,12 @@ describe "the 'tagged' function" do
   end
 
   it 'is not available when --tasks is on' do
-    Puppet[:tasks] = true
-    expect do
-      @scope.function_tagged(['one', 'two'])
-    end.to raise_error(Puppet::ParseError, /is only available when compiling a catalog/)
+    Puppet.override({tasks: true,
+                     current_lexer: Puppet::Pops::Parser::TaskLexer.new}) do
+      expect do
+        @scope.function_tagged(['one', 'two'])
+      end.to raise_error(Puppet::ParseError, /is only available when compiling a catalog/)
+    end
   end
 
   it 'should be case-insensitive' do

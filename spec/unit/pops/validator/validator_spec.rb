@@ -1,3 +1,4 @@
+require 'pry'
 require 'spec_helper'
 require 'puppet/pops'
 require 'puppet_spec/pops'
@@ -326,7 +327,12 @@ describe "validating 4x" do
   end
 
   context 'with --tasks set' do
-    before(:each) { Puppet[:tasks] = true }
+    around(:each) do |example|
+      Puppet.override(tasks: true,
+                      current_lexer: Puppet::Pops::Parser::TaskLexer.new) do
+        example.run
+      end
+    end
 
     it 'raises an error for illegal plan names' do
       with_environment(environment) do

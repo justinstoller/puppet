@@ -22,6 +22,7 @@ require 'puppet/external/pson/common'
 require 'puppet/external/pson/version'
 require 'puppet/external/pson/pure'
 require 'puppet/gettext/config'
+require 'puppet/pops/parser/lexer2'
 
 
 #------------------------------------------------------------
@@ -234,7 +235,9 @@ module Puppet
     root_environment = Puppet::Node::Environment.create(:'*root*', [], Puppet::Node::Environment::NO_MANIFEST)
     {
       :current_environment => root_environment,
-      :root_environment => root_environment
+      :root_environment => root_environment,
+      :current_lexer => Puppet::Pops::Parser::CatalogLexer.new,
+      :tasks => false,
     }
   end
 

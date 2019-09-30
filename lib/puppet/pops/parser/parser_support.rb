@@ -21,7 +21,6 @@ class Parser
   #
   Factory = Model::Factory
 
-  attr_accessor :lexer
   attr_reader :definitions
 
   # Returns the token text of the given lexer token, or nil, if token is nil
@@ -57,7 +56,7 @@ class Parser
       except.line = semantic[:line];
       except.pos = semantic[:pos];
     else
-      locator = @lexer.locator
+      locator = Puppet.lookup(:current_lexer).locator
       except.file = locator.file
       if semantic.is_a?(Factory)
         offset = semantic['offset']
@@ -77,12 +76,12 @@ class Parser
         file = file + ".pp"
       end
     end
-    @lexer.file = file
-    _parse
+    lexer = Puppet.lookup(:current_lexer)
+    lexer.file = file
+    _parse(lexer)
   end
 
   def initialize()
-    @lexer = Lexer2.new
     @namestack = []
     @definitions = []
   end
@@ -95,8 +94,8 @@ class Parser
     else
       value_at = "'#{value[:value]}'"
     end
-    error = Issues::SYNTAX_ERROR.format(:where => value_at)
-    error = "#{error}, token: #{token}" if @yydebug
+    e = Issues::SYNTAX_ERROR.format(:where => value_at)
+    e = "#{e}, token: #{token}" if @yydebug
 
     # Note, old parser had processing of "expected token here" - do not try to reinstate:
     # The 'expected' is only of value at end of input, otherwise any parse error involving a
@@ -127,17 +126,18 @@ class Parser
       end
     else
       # At end of input, use what the lexer thinks is the source file
-      file = lexer.file
+      file = Puppet.lookup(:current_lexer).file
     end
     file = nil unless file.is_a?(String) && !file.empty?
-    raise Puppet::ParseErrorWithIssue.new(error, file, line, pos, nil, Issues::SYNTAX_ERROR.issue_code)
+    raise Puppet::ParseErrorWithIssue.new(e, file, line, pos, nil, Issues::SYNTAX_ERROR.issue_code)
   end
 
   # Parses a String of pp DSL code.
   #
   def parse_string(code, path = nil)
-    @lexer.lex_string(code, path)
-    _parse()
+    lexer = Puppet.lookup(:current_lexer)
+    lexer.lex_string(code, path)
+    _parse(lexer)
   end
 
   # Mark the factory wrapped model object with location information
@@ -145,7 +145,9 @@ class Parser
   # @api private
   #
   def loc(factory, start_locatable, end_locatable = nil)
-    factory.record_position(@lexer.locator, start_locatable, end_locatable)
+    factory.record_position(Puppet.lookup(:current_lexer).locator,
+                            start_locatable,
+                            end_locatable)
   end
 
   # Mark the factory wrapped heredoc model object with location information
@@ -216,19 +218,20 @@ class Parser
   # Creates a program with the given body.
   #
   def create_program(body)
-    locator = @lexer.locator
+    locator = Puppet.lookup(:current_lexer).locator
     Factory.PROGRAM(body, definitions, locator)
   end
 
   # Creates an empty program with a single No-op at the input's EOF offset with 0 length.
   #
   def create_empty_program()
-    locator = @lexer.locator
+    lexer = Puppet.lookup(:current_lexer)
+    locator = lexer.locator
     no_op = Factory.literal(nil)
     # Create a synthetic NOOP token at EOF offset with 0 size. The lexer does not produce an EOF token that is
     # visible to the grammar rules. Creating this token is mainly to reuse the positioning logic as it
     # expects a token decorated with location information.
-    _, token = @lexer.emit_completed([:NOOP,'',0], locator.string.bytesize)
+    _, token = lexer.emit_completed([:NOOP,'',0], locator.string.bytesize)
     loc(no_op, token)
     # Program with a Noop
     program = Factory.PROGRAM(no_op, [], locator)
@@ -240,14 +243,14 @@ class Parser
   #
   # @api private
   #
-  def _parse()
+  def _parse(lexer)
     begin
       @yydebug = false
-      main = yyparse(@lexer,:scan)
+      main = yyparse(lexer, :scan)
     end
     return main
   ensure
-    @lexer.clear
+    lexer.clear
     @namestack = []
     @definitions = []
   end

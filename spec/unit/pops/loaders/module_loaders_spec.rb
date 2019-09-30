@@ -92,10 +92,12 @@ describe 'FileBased module loader' do
 
   context 'loading tasks' do
     before(:each) do
-      Puppet[:tasks] = true
-      Puppet.push_context(:loaders => loaders)
+      Puppet.push_context({
+        tasks: true,
+        current_lexer: Puppet::Pops::Parser::TaskLexer.new})
+      Puppet.push_context({loaders: loaders})
     end
-    after(:each) { Puppet.pop_context }
+    after(:each) { Puppet.pop_context; Puppet.pop_context }
 
     it 'can load tasks with multiple files' do
       module_dir = dir_containing('testmodule', 'tasks' => {'foo.py' => '', 'foo.json' => '{}'})

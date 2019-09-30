@@ -6,8 +6,13 @@ describe "egrammar parsing of 'plan'" do
   include ParserRspecHelper
 
   context 'with --tasks' do
-    before(:each) do
-      Puppet[:tasks] = true
+    around(:each) do |example|
+      Puppet.override({
+        tasks: true,
+        current_lexer: Puppet::Pops::Parser::TaskLexer.new
+      }) do
+        example.run
+      end
     end
 
     it "an empty body" do
@@ -36,12 +41,13 @@ describe "egrammar parsing of 'plan'" do
   end
 
   context 'with --no-tasks' do
-    before(:each) do
-      Puppet[:tasks] = false
-    end
-
     it "the keyword 'plan' is a name" do
-      expect(dump(parse("$a = plan"))).to eq("(= $a plan)")
+      Puppet.override({
+        tasks: false,
+        current_lexer: Puppet::Pops::Parser::CatalogLexer.new
+      }) do
+        expect(dump(parse("$a = plan"))).to eq("(= $a plan)")
+      end
     end
   end
 end

@@ -2034,6 +2034,15 @@ EOT
   :tasks => {
     :default => false,
     :type => :boolean,
+    :hook => proc do |val|
+      if val
+        Puppet.push_context({
+          tasks: true,
+          current_lexer: Puppet::Pops::Parser::TaskLexer.new
+        })
+        Puppet.warn_once("The task setting is deprecated")
+      end
+    end,
     :desc => <<-'EOT'
       Turns on experimental support for tasks and plans in the puppet language. This is for internal API use only.
       Do not change this setting.

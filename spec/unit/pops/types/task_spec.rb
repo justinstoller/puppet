@@ -36,7 +36,14 @@ describe 'The Task Type' do
     let(:warnings) { logs.select { |log| log.level == :warning }.map { |log| log.message } }
     let(:notices) { logs.select { |log| log.level == :notice }.map { |log| log.message } }
     let(:task_t) { TypeFactory.task }
-    before(:each) { Puppet[:tasks] = true }
+    around(:each) do |example|
+      Puppet.override({
+        tasks: true,
+        current_lexer: Puppet::Pops::Parser::TaskLexer.new
+      }) do
+        example.run
+      end
+    end
 
     context 'tasks' do
       let(:compiler) { Puppet::Parser::ScriptCompiler.new(env, node.name) }
@@ -81,11 +88,14 @@ describe 'The Task Type' do
         end
 
         context 'without --tasks' do
-          before(:each) { Puppet[:tasks] = false }
-
           it 'evaluator does not recognize generic tasks' do
-            compile do
-              expect(module_loader.load(:task, 'testmodule::hello')).to be_nil
+            Puppet.override({
+              tasks: false,
+              current_lexer: Puppet::Pops::Parser::TaskLexer.new
+            }) do
+              compile do
+                expect(module_loader.load(:task, 'testmodule::hello')).to be_nil
+              end
             end
           end
         end

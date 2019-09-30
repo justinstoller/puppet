@@ -8,8 +8,13 @@ describe 'the script compiler' do
   include PuppetSpec::Compiler
   include PuppetSpec::Files
   include Matchers::Resource
-  before(:each) do
-    Puppet[:tasks] = true
+  around(:each) do |example|
+    Puppet.override({
+      tasks: true,
+      current_lexer: Puppet::Pops::Parser::TaskLexer.new
+    }) do
+      example.run
+    end
   end
 
   context "when used" do

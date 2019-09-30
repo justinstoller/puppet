@@ -668,8 +668,6 @@ class Lexer2
       :after => nil,
       :line_lexical_start => 0
     }
-    # Use of --tasks introduces the new keyword 'plan'
-    @taskm_keywords = Puppet[:tasks] ? { 'plan' => [:PLAN, 'plan',  4], 'apply' => [:APPLY, 'apply', 5] }.freeze : EMPTY_HASH
   end
 
   # Scans all of the content and returns it in an array
@@ -774,7 +772,24 @@ class Lexer2
       true
     end
   end
-
 end
+
+class CatalogLexer < Lexer2
+  def initvars
+    super
+
+    @taskm_keywords = EMPTY_HASH
+  end
+end
+
+class TaskLexer < Lexer2
+  def initvars
+    super
+
+    @taskm_keywords = { 'plan' => [:PLAN, 'plan',  4],
+                        'apply' => [:APPLY, 'apply', 5] }.freeze
+  end
+end
+
 end
 end

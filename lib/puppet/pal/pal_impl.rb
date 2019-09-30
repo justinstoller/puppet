@@ -83,7 +83,8 @@ module Pal
       end
     end
 
-    Puppet[:tasks] = true
+    Puppet.push_context({tasks: true,
+                         current_lexer: Puppet::Pops::Parser::TaskLexer.new})
     # After the assertions, if code_string is non nil - it has the highest precedence
     Puppet[:code] = code_string unless code_string.nil?
 
@@ -177,19 +178,19 @@ module Pal
     end
 
     # We need to make sure to set these back when we're done
-    previous_tasks_value = Puppet[:tasks]
     previous_code_value = Puppet[:code]
 
-    Puppet[:tasks] = false
     # After the assertions, if code_string is non nil - it has the highest precedence
     Puppet[:code] = code_string unless code_string.nil?
 
     # If manifest_file is nil, the #main method will use the env configured manifest
     # to do things in the block while a Script Compiler is in effect
-    main(manifest_file, facts, variables, :catalog, &block)
+    Puppet.override({task: true,
+                     current_lexer: Puppet::Pops::Parser::TaskLexer.new}) do
+      main(manifest_file, facts, variables, :catalog, &block)
+    end
   ensure
     # Clean up after ourselves
-    Puppet[:tasks] = previous_tasks_value
     Puppet[:code] = previous_code_value
   end
 

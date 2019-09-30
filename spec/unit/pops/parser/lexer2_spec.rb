@@ -5,13 +5,13 @@ require 'puppet/pops/parser/lexer2'
 
 module EgrammarLexer2Spec
   def tokens_scanned_from(s)
-    lexer = Puppet::Pops::Parser::Lexer2.new
+    lexer = Puppet.lookup(:current_lexer)
     lexer.string = s
     lexer.fullscan[0..-2]
   end
 
   def epp_tokens_scanned_from(s)
-    lexer = Puppet::Pops::Parser::Lexer2.new
+    lexer = Puppet.lookup(:current_lexer)
     lexer.string = s
     lexer.fullscan_epp[0..-2]
   end
@@ -111,11 +111,10 @@ describe 'Lexer2' do
   end
 
   context 'when --tasks' do
-    before(:each) { Puppet[:tasks] = true }
-    after(:each) { Puppet[:tasks] = false }
-
     it "should lex a keyword from 'plan'" do
-      expect(tokens_scanned_from('plan')).to match_tokens2(:PLAN)
+      Puppet.override(current_lexer: Puppet::Pops::Parser::TaskLexer.new) do
+        expect(tokens_scanned_from('plan')).to match_tokens2(:PLAN)
+      end
     end
   end
 

@@ -3,6 +3,7 @@ module Puppet::Pops
 module Parser
 
 require 'puppet/util/multi_match'
+require 'puppet/pops/parser/locatable'
 
 # This is an integral part of the Lexer. It is broken out into a separate module
 # for maintainability of the code, and making the various parts of the lexer focused.

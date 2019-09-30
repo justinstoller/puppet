@@ -127,7 +127,8 @@ Copyright (c) 2017 Puppet Inc., LLC Licensed under the Apache 2.0 License
 
   def main
     # The tasks feature is always on
-    Puppet[:tasks] = true
+    Puppet.push_context({tasks: true,
+                         current_lexer: Puppet::Pops::Parser::TaskLexer.new})
 
     # Set the puppet code or file to use.
     if options[:code] || command_line.args.length == 0
