@@ -53,10 +53,6 @@ class IssueReporter
       if errors.size == 1 || max_errors <= 1
         # raise immediately
         exception = create_exception(emit_exception, emit_message, formatter, errors[0])
-        # if an exception was given as cause, use it's backtrace instead of the one indicating "here"
-        if errors[0].exception
-          exception.set_backtrace(errors[0].exception.backtrace)
-        end
         raise exception
       end
       emitted = 0
@@ -106,11 +102,26 @@ class IssueReporter
     file = diagnostic.file
     file = (file.is_a?(String) && file.empty?) ? nil : file
     line = pos = nil
+
     if diagnostic.source_pos
       line = diagnostic.source_pos.line
       pos = diagnostic.source_pos.pos
     end
-    exception_class.new(format_with_prefix(emit_message, formatter.format_message(diagnostic)), file, line, pos, nil, diagnostic.issue.issue_code, diagnostic.arguments)
+
+    exception = exception_class.new(
+                  format_with_prefix(emit_message, formatter.format_message(diagnostic)),
+                  file,
+                  line,
+                  pos,
+                  nil,
+                  diagnostic.issue.issue_code,
+                  diagnostic.arguments)
+
+    if diagnostic.exception
+      exception.set_backtrace(diagnostic.exception.backtrace)
+    end
+
+    exception
   end
   private_class_method :create_exception
 
