@@ -121,6 +121,10 @@ class IssueReporter
       exception.set_backtrace(diagnostic.exception.backtrace)
     end
 
+    if diagnostic.exception && diagnostic.exception.respond_to?(:puppet_stacktrace)
+      exception.puppet_stacktrace = diagnostic.exception.puppet_stacktrace
+    end
+
     exception
   end
   private_class_method :create_exception
