@@ -10,6 +10,39 @@ describe Puppet::Util::Log do
     Puppet::Util::Log.new(:level => :notice, :message => message)
   end
 
+  class PuppetStackCreator
+    def raise_error(exception_class)
+      case exception_class
+      when Puppet::ParseErrorWithIssue
+        raise exception_class.new('Oops', '/tmp/test.pp', 30, 15, nil, :SYNTAX_ERROR)
+      when Puppet::ParseError
+        raise exception_class.new('Oops', '/tmp/test.pp', 30, 15)
+      else
+        raise exception_class.new('Oops')
+      end
+    end
+
+    def call_raiser(exception_class)
+      Puppet::Pops::PuppetStack.stack('/tmp/test2.pp', 20, self, :raise_error, [exception_class])
+    end
+
+    def two_frames_and_a_raise(exception_class)
+      Puppet::Pops::PuppetStack.stack('/tmp/test3.pp', 15, self, :call_raiser, [exception_class])
+    end
+
+    def outer_rescue(exception_class)
+      begin
+        two_frames_and_a_raise(exception_class)
+      rescue Puppet::Error => e
+        Puppet.log_exception(e)
+      end
+    end
+
+    def run(exception_class)
+      Puppet::Pops::PuppetStack.stack('/tmp/test4.pp', 10, self, :outer_rescue, [exception_class])
+    end
+  end
+
   it "should write a given message to the specified destination" do
     arraydest = []
     Puppet::Util::Log.newdestination(Puppet::Test::LogCollector.new(arraydest))
@@ -256,6 +289,32 @@ describe Puppet::Util::Log do
       log = logs[0]
       expect(log.message).to_not match('/log_spec.rb')
       expect(log.backtrace).to be_a(Array)
+      expect(log.backtrace.first).to match('/log_spec.rb')
+    end
+
+    it "backtrace has interleaved PuppetStack when logging ParseErrorWithIssue" do
+      logs = []
+      destination = Puppet::Test::LogCollector.new(logs)
+      Puppet::Util::Log.newdestination(destination)
+
+      Puppet[:trace] = true
+      Puppet::Util::Log.with_destination(destination) do
+        PuppetStackCreator.new.run(Puppet::ParseErrorWithIssue)
+      end
+      Puppet[:trace] = false
+
+      # Normal logging exepectations are still true
+      expect(logs.size).to eq(1)
+      log = logs[0]
+      expect(log.message).to_not match('/log_spec.rb')
+      expect(log.backtrace[0]).to match('/log_spec.rb')
+
+      # We have our first PuppetStack frame in the right spot
+      expect(log.backtrace[1]).to match('/tmp/test2.pp:20')
+      puppetstack = log.backtrace.select { |l| l =~ /tmp\/test\d\.pp/ }
+
+      # And the correct number of PuppetStack frames total
+      expect(puppetstack.length).to equal 3
     end
 
     it "backtrace member is unset when logging ParseErrorWithIssue with trace disabled" do
