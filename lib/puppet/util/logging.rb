@@ -70,10 +70,21 @@ module Logging
     end
   end
 
-  def build_exception_trace(arr, exception, trace = true)
+  def build_exception_trace(arr, exception, trace = true, puppet_trace = true)
+    puppetstack = []
+    if puppet_trace && exception.respond_to?(:puppet_stacktrace)
+      puppetstack = exception.puppet_stacktrace
+    end
+
     if trace and exception.backtrace
       exception.backtrace.each do |line|
-        arr << line =~ /^(.+):(\d+.*)$/ ? ("#{Pathname($1).realpath}:#{$2}" rescue line) : line
+        resolved_line = line =~ /^(.+):(\d+.*)$/ ? ("#{Pathname($1).realpath}:#{$2}" rescue line) : line
+        if resolved_line =~ /puppet_stack.*in.*stack'/ && !puppetstack.empty?
+          filename, lineno = exception.puppet_stacktrace.shift
+          stackline = "#{filename}:#{lineno}"
+          arr << ("#{Pathname(filename).realpath}:#{lineno}" rescue stackline)
+        end
+        arr << resolved_line
       end
     end
     if exception.respond_to?(:original)
