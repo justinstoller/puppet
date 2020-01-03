@@ -342,6 +342,54 @@ describe Puppet::Util::Log do
       expect(puppetstack.length).to equal 3
     end
 
+    it "only uses PuppetStack as backtrace when configured to" do
+      logs = []
+      destination = Puppet::Test::LogCollector.new(logs)
+      Puppet::Util::Log.newdestination(destination)
+
+      Puppet[:trace] = false
+      Puppet[:puppet_trace] = true
+      Puppet::Util::Log.with_destination(destination) do
+        PuppetStackCreator.new.run(Puppet::ParseErrorWithIssue)
+      end
+      Puppet[:trace] = false
+      Puppet[:puppet_trace] = false
+
+      # Normal logging exepectations are still true
+      expect(logs.size).to eq(1)
+      log = logs[0]
+
+      # We only have a stacktrace that include the PuppetStack
+      expect(log.backtrace[0]).to match('/tmp/test2.pp:20')
+      expect(log.backtrace.length).to equal 3
+    end
+
+    it "put only PuppetStack in message if not ParseErrorWithIssue" do
+      logs = []
+      destination = Puppet::Test::LogCollector.new(logs)
+      Puppet::Util::Log.newdestination(destination)
+
+      Puppet[:trace] = false
+      Puppet[:puppet_trace] = true
+      Puppet::Util::Log.with_destination(destination) do
+        PuppetStackCreator.new.run(Puppet::ParseError)
+      end
+      Puppet[:trace] = false
+      Puppet[:puppet_trace] = false
+
+      # Normal logging exepectations are still true
+      expect(logs.size).to eq(1)
+      log = logs[0]
+
+      # We have our first PuppetStack frame in the right spot
+      log_lines = log.message.split("\n")
+      expect(log_lines[1]).to match('/tmp/test2.pp:20')
+      puppetstack = log_lines.select { |l| l =~ /tmp\/test\d\.pp/ }
+
+      # And the correct number of PuppetStack frames total
+      expect(puppetstack.length).to equal 3
+    end
+
     it "backtrace member is unset when logging ParseErrorWithIssue with trace disabled" do
       logs = []
       destination = Puppet::Test::LogCollector.new(logs)

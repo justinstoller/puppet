@@ -186,6 +186,11 @@ module Puppet
           Facter.trace(value) if Facter.respond_to? :trace
         end
     },
+    :puppet_trace => {
+        :default  => false,
+        :type     => :boolean,
+        :desc     => "Whether to print the Puppet stack trace on some errors",
+    },
     :profile => {
         :default  => false,
         :type     => :boolean,

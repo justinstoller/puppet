@@ -532,7 +532,7 @@ module Util
     format_backtrace_array(backtrace, puppetstack).join("\n")
   end
 
-  def self.format_backtrace_array(rubystack, puppetstack)
+  def self.format_backtrace_array(rubystack, puppetstack = [])
     rubystack.flat_map do |frame|
       rubyframe = resolve_stackframe(frame)
       if rubyframe =~ PUPPET_STACK_INSERTION_FRAME && !puppetstack.empty?
