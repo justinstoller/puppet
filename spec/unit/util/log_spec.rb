@@ -317,6 +317,31 @@ describe Puppet::Util::Log do
       expect(puppetstack.length).to equal 3
     end
 
+    it "message has interleaved PuppetStack when logging ParseError" do
+      logs = []
+      destination = Puppet::Test::LogCollector.new(logs)
+      Puppet::Util::Log.newdestination(destination)
+
+      Puppet[:trace] = true
+      Puppet::Util::Log.with_destination(destination) do
+        PuppetStackCreator.new.run(Puppet::ParseError)
+      end
+      Puppet[:trace] = false
+
+      # Normal logging exepectations are still true
+      expect(logs.size).to eq(1)
+      log = logs[0]
+
+      # We have our first PuppetStack frame in the right spot
+      log_lines = log.message.split("\n")
+      expect(log_lines[1]).to match('/log_spec.rb')
+      expect(log_lines[2]).to match('/tmp/test2.pp:20')
+      puppetstack = log_lines.select { |l| l =~ /tmp\/test\d\.pp/ }
+
+      # And the correct number of PuppetStack frames total
+      expect(puppetstack.length).to equal 3
+    end
+
     it "backtrace member is unset when logging ParseErrorWithIssue with trace disabled" do
       logs = []
       destination = Puppet::Test::LogCollector.new(logs)
