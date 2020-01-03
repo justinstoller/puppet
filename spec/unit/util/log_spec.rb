@@ -240,7 +240,7 @@ describe Puppet::Util::Log do
       expect(log.backtrace).to be_nil
     end
 
-    it "backtrace is Array in 'backtrace' and excluded from 'message' when logging ParseErrorWithIssue with trace enabled" do
+    it "backtrace member of Log event is set vs added to message when logging ParseErrorWithIssue with trace enabled" do
       logs = []
       destination = Puppet::Test::LogCollector.new(logs)
 
@@ -258,7 +258,7 @@ describe Puppet::Util::Log do
       expect(log.backtrace).to be_a(Array)
     end
 
-    it "backtrace is excluded when logging ParseErrorWithIssue with trace disabled" do
+    it "backtrace member is unset when logging ParseErrorWithIssue with trace disabled" do
       logs = []
       destination = Puppet::Test::LogCollector.new(logs)
 
