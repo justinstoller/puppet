@@ -72,15 +72,7 @@ module Logging
   end
 
   def build_exception_trace(exception, combined_trace = true, puppet_trace = false)
-    built_trace = []
-
-    puppetstack = exception.respond_to?(:puppetstack) ? exception.puppetstack : []
-
-    if combined_trace and exception.backtrace
-      built_trace = Puppet::Util.format_backtrace_array(exception.backtrace, puppetstack)
-    elsif puppet_trace && !puppetstack.empty?
-      built_trace = Puppet::Util.format_backtrace_array(puppetstack)
-    end
+    built_trace = format_backtrace(exception, combined_trace, puppet_trace)
 
     if exception.respond_to?(:original)
       original =  exception.original
@@ -106,12 +98,7 @@ module Logging
       arr << message
     end
 
-    puppetstack = exception.respond_to?(:puppetstack) ? exception.puppetstack : []
-    if combined_trace and exception.backtrace
-      arr << Puppet::Util.pretty_backtrace(exception.backtrace, puppetstack)
-    elsif puppet_trace and !puppetstack.empty?
-      arr << Puppet::Util.pretty_backtrace(puppetstack)
-    end
+    arr += format_backtrace(exception, combined_trace, puppet_trace)
 
     if exception.respond_to?(:original) and exception.original
       arr << _("Wrapped exception:")
@@ -119,6 +106,18 @@ module Logging
     end
 
     arr.flatten.join("\n")
+  end
+
+  def format_backtrace(exception, combined_trace, puppet_trace)
+    puppetstack = exception.respond_to?(:puppetstack) ? exception.puppetstack : []
+
+    if combined_trace and exception.backtrace
+      Puppet::Util.format_backtrace_array(exception.backtrace, puppetstack)
+    elsif puppet_trace && !puppetstack.empty?
+      Puppet::Util.format_backtrace_array(puppetstack)
+    else
+      []
+    end
   end
 
   def log_and_raise(exception, message)
