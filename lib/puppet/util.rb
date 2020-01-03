@@ -532,13 +532,20 @@ module Util
     format_backtrace_array(backtrace, puppetstack).join("\n")
   end
 
-  def self.format_backtrace_array(rubystack, puppetstack = [])
-    rubystack.flat_map do |frame|
-      rubyframe = resolve_stackframe(frame)
-      if rubyframe =~ PUPPET_STACK_INSERTION_FRAME && !puppetstack.empty?
-        [resolve_stackframe(puppetstack.shift.join(':')), rubyframe]
+  # arguments may be a Ruby stack, with an optional Puppet stack argument,
+  # or just a Puppet stack.
+  # stacks may be an Array of Strings "/foo.rb:0 in `blah'" or
+  # an Array of Arrays that represent a frame: ["/foo.pp", 0]
+  def self.format_backtrace_array(primary_stack, puppetstack = [])
+    primary_stack.flat_map do |frame|
+      frame = format_puppetstack_frame(frame) if frame.is_a?(Array)
+      primary_frame = resolve_stackframe(frame)
+
+      if primary_frame =~ PUPPET_STACK_INSERTION_FRAME && !puppetstack.empty?
+        [resolve_stackframe(format_puppetstack_frame(puppetstack.shift)),
+         primary_frame]
       else
-        rubyframe
+        primary_frame
       end
     end
   end
@@ -551,6 +558,10 @@ module Util
     else
       frame
     end
+  end
+
+  def self.format_puppetstack_frame(file_and_lineno)
+    file_and_lineno.join(':')
   end
 
   # Replace a file, securely.  This takes a block, and passes it the file
