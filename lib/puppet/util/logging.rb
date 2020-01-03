@@ -51,8 +51,7 @@ module Logging
     trace = Puppet[:trace] || options[:trace]
     if message == :default && exception.is_a?(Puppet::ParseErrorWithIssue)
       # Retain all detailed info and keep plain message and stacktrace separate
-      backtrace = []
-      build_exception_trace(backtrace, exception, trace)
+      backtrace = build_exception_trace(exception, trace)
       Puppet::Util::Log.create({
           :level => options[:level] || :err,
           :source => log_source,
@@ -70,31 +69,26 @@ module Logging
     end
   end
 
-  def build_exception_trace(arr, exception, trace = true, puppet_trace = true)
+  def build_exception_trace(exception, trace = true, puppet_trace = true)
+    built_trace = []
     puppetstack = []
     if puppet_trace && exception.respond_to?(:puppet_stacktrace)
       puppetstack = exception.puppet_stacktrace
     end
 
     if trace and exception.backtrace
-      exception.backtrace.each do |line|
-        resolved_line = line =~ /^(.+):(\d+.*)$/ ? ("#{Pathname($1).realpath}:#{$2}" rescue line) : line
-        if resolved_line =~ /puppet_stack.*in.*stack'/ && !puppetstack.empty?
-          filename, lineno = exception.puppet_stacktrace.shift
-          stackline = "#{filename}:#{lineno}"
-          arr << ("#{Pathname(filename).realpath}:#{lineno}" rescue stackline)
-        end
-        arr << resolved_line
-      end
+      built_trace = Puppet::Util.format_backtrace_array(exception.backtrace, puppetstack)
     end
     if exception.respond_to?(:original)
       original =  exception.original
       unless original.nil?
-        arr << _('Wrapped exception:')
-        arr << original.message
-        build_exception_trace(arr, original, trace)
+        built_trace << _('Wrapped exception:')
+        built_trace << original.message
+        built_trace += build_exception_trace(original, trace)
       end
     end
+
+    built_trace
   end
   private :build_exception_trace
 
@@ -110,7 +104,8 @@ module Logging
     end
 
     if trace and exception.backtrace
-      arr << Puppet::Util.pretty_backtrace(exception.backtrace)
+      puppetstack = exception.respond_to?(:puppet_stacktrace) ? exception.puppet_stacktrace : []
+      arr << Puppet::Util.pretty_backtrace(exception.backtrace, puppetstack)
     end
     if exception.respond_to?(:original) and exception.original
       arr << _("Wrapped exception:")
