@@ -1,7 +1,6 @@
 require 'benchmark'
 require 'tmpdir'
 require 'csv'
-require 'objspace'
 
 namespace :benchmark do
   def generate_scenario_tasks(location, name)

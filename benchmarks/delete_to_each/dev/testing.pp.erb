@@ -1,0 +1,10 @@
+function dev::testing(
+  Array[String, 1] $strings = ["string"],
+  ) >> Undef {
+
+  delete($strings, "string").each |String $string| {
+    "string ${string}"
+  }
+
+  undef
+}

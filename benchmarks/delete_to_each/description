@@ -1,0 +1,3 @@
+Benchmark scenario: Passing a typed collection through a 3x function and into a 4x iterator
+Benchmark target: catalog compilation
+

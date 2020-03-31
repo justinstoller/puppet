@@ -1,0 +1,8 @@
+class { "dev":
+  strings => [
+    "string",
+  <% size.times do |i| %>
+    "string<%= i %>",
+  <% end %>
+  ],
+}
